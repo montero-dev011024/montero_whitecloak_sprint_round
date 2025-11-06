@@ -1,0 +1,33 @@
+# Copilot Instructions for Jia
+- Stable Codebase: Avoid unnecessary refactors or removal of base modules
+- Always exhibit excellent code organization, reusable structure, and testing discipline
+- Ensure Perfect functionality, flawless design match, with unit tests and excellent code structure.
+- Every implementation should be an exemplary work exceeding production standards.
+- **Architecture**: Next.js 15 App Router lives in `src/app`, pairing UI routes with API handlers under the same folder; root layout (`src/app/layout.tsx`) wraps the tree with `AppContextProvider`, `ParallaxProvider`, and `ErrorBoundary`.
+- **Multi-tenant routing**: `src/middleware.ts` rewrites per host (`hellojia.ai`, `hirejia.ai`, `admin.hirejia.ai`)—ensure new routes respect these domain rules and portal-specific prefixes.
+- **Contexts**: `AppContext` manages recruiter/admin state (localStorage-backed user, authToken, activeOrg); job-portal pages use `ContextV2` which strips legacy Argon CSS and exposes modal/toaster controls.
+- **Auth flow**: Login goes through Firebase (`lib/firebase/firebaseClient.js`) storing user info in localStorage; guard recruiter pages with `AuthGuard` to enforce role/org checks and to sync org data through `/api/get-org`.
+- **Styling**: Legacy Argon styles remain in `lib/styles/*.scss`; job portal uses `lib/styles/commonV2` plus `ContextV2` to avoid Argon injection—align new components with the portal’s style set.
+- **Component organization**: Reusable UI lives in `lib/components/**` grouped by domain (AdminComponents, CandidateComponents, VoiceAssistant). Check existing implementations before adding new widgets to keep UX consistent.
+- **Data layer**: All route handlers call `connectMongoDB` (`lib/mongoDB/mongoDB.ts`) and operate on shared collections (`interviews`, `applicant-cv`, `organizations`, `global-settings`). Reuse this helper rather than instantiating clients manually.
+- **ObjectId handling**: Server routes that touch `_id` fields convert via `new ObjectId(...)`; mirror this when filtering Mongo collections to avoid string mismatches.
+- **Status logic**: Application stages and badge colors are centralized in `lib/Utils.tsx` (`getStage`, `applicationStatusMap`, `getStatusBadge`). Extend these maps instead of hard-coding status strings.
+- **Notifications**: Use the toast helpers in `lib/Utils.tsx` (`errorToast`, `successToast`, `loadingToast`) and SweetAlert modals for user feedback to keep consistent UX messaging.
+- **Local storage sync**: `useLocalStorage` emits a custom `localStorageChange` event for cross-tab updates. Leverage it when storing org/user state so dependent components react correctly.
+- **AI prompts**: CV screening draws instructions from `global-settings.cv_screening_prompt` (`/api/ai-settings`). When adjusting AI behavior, update that document instead of inlining prompts.
+- **OpenAI usage**: Intensive workflows call the Responses API with the `o4-mini` model (`/api/screen-cv`, `/api/analyze-cv`); lightweight chat still uses `chat.completions` (`/api/chat-completion`). Keep model choice aligned with performance expectations.
+- **Email delivery**: System notifications use Mailgun via `lib/Email.ts` sending from `noreply@hellojia.ai`. Reuse `sendEmail` to respect provider configuration.
+- **File storage**: Resume and recording uploads target Cloudflare R2 using AWS SDK commands (`start-multi-part-upload`, `finish-upload`, `update-recording-details`). Follow that flow when adding new large-file endpoints.
+- **Applicant CV flow**: CVs persist in `applicant-cv` collection (`save-cv`, `load-user-cv`) and are reused by screening endpoints; keep schemas consistent when expanding CV features.
+- **Recruiter dashboards**: Entry points under `src/app/recruiter-dashboard` rely on `HeaderBar`, Argon components, and `AuthGuard`; confirm org context (`orgID` query, `activeOrg` localStorage) when building new pages.
+- **Job portal**: Routes in `src/app/(job-portal)` use V2 components (`lib/components/commonV2/*`) and expect the floating action button plus toaster; extend those patterns for new applicant experiences.
+- **Voice assistant**: Speech features, timers, and transcript helpers live in `lib/VoiceAssistant`. Reuse provided hooks/components (e.g., `VoiceAssistantV2`, `TranscriptUtils`) for interview-facing functionality.
+- **Utilities**: Shared helpers (`lib/utils/constantsV2.ts`, `helpersV2.ts`) store asset paths, formatting, and filtering logic—import rather than duplicating constants.
+- **Assets**: Public assets are organized under `public/assets`, with Filipino location data at `public/philippines-locations.json`; reference these instead of embedding geography lists.
+- **Environment variables**: Besides the `.env.example` keys, production features require `MAILGUN_API_KEY` and Cloudflare R2 credentials (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`). Document new secrets when introducing services.
+- **Build & run**: Local dev uses `npm run dev` (Turbopack) and `npm run build`; the team often runs inside Docker, so prefer container-friendly scripts over ad-hoc tooling.
+- **Manual testing**: `rest.http` contains sample HTTP calls (e.g., `POST /api/custom-log`) for quick API checks; add new examples there when introducing endpoints.
+- **TypeScript setup**: Path alias `@/*` resolves to `src/*` (see `tsconfig.json`); follow this convention for imports instead of relative `../../` chains.
+- **Error boundaries**: Wrap risky UI in `PageErrorBoundary` or `useErrorHandler`; the root layout already includes the global `ErrorBoundary` to prevent blank screens.
+- **Stateful chat**: `/api/chat-completion` keeps conversation context in a module-level `messages` array; if adding similar endpoints, ensure concurrency/isolation requirements are met.
+- **Testing hooks**: Some APIs support `testMode` payloads (see `/api/screen-cv`); use these switches for integration tests rather than hitting production collections.

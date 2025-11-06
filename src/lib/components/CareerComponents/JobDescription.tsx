@@ -5,7 +5,7 @@ import Swal from "sweetalert2";
 import InterviewQuestionGeneratorV2 from "./InterviewQuestionGeneratorV2";
 import { useAppContext } from "../../context/AppContext";
 import DirectInterviewLinkV2 from "./DirectInterviewLinkV2";
-import CareerForm from "./CareerForm";
+import SegmentedCareerForm from "./SegmentedCareerForm";
 import CareerLink from "./CareerLink";
 
 export default function JobDescription({ formData, setFormData, editModal, isEditing, setIsEditing, handleCancelEdit }: { formData: any, setFormData: (formData: any) => void, editModal: boolean, isEditing: boolean, setIsEditing: (isEditing: boolean) => void, handleCancelEdit: () => void }) {
@@ -332,7 +332,11 @@ export default function JobDescription({ formData, setFormData, editModal, isEdi
                     }}>
                    
                     <div className="modal-content" style={{ overflowY: "scroll", height: "100vh", width: "90vw", background: "#fff", border: `1.5px solid #E9EAEB`, borderRadius: 14, boxShadow: "0 8px 32px rgba(30,32,60,0.18)", padding: "24px" }}>
-                      <CareerForm career={formData} formType="edit" setShowEditModal={setShowEditModal} />
+                      <SegmentedCareerForm
+                        career={formData}
+                        formType="edit"
+                        setShowEditModal={setShowEditModal}
+                      />
                     </div>
                   </div>
                 </div>
