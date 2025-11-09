@@ -169,6 +169,8 @@ export default function ManageCareerPage() {
         screeningSetting: "",
         requireVideo: false,
         directInterviewLink: "",
+        teamMembers: [],
+        team: { members: [] },
     });
     const [showCandidateHistory, setShowCandidateHistory] = useState(false);
     const [selectedCandidateHistory, setSelectedCandidateHistory] = useState<any>({});
@@ -285,6 +287,18 @@ export default function ManageCareerPage() {
                     lastEditedBy: response.data?.lastEditedBy || {},
                     employmentType: response.data?.employmentType || "Full-time",
                     orgID: response.data?.orgID || "",
+                                        teamMembers: Array.isArray(response.data?.teamMembers)
+                                            ? response.data?.teamMembers
+                                            : Array.isArray(response.data?.team?.members)
+                                                ? response.data?.team?.members
+                                                : [],
+                                        team: {
+                                            members: Array.isArray(response.data?.team?.members)
+                                                ? response.data?.team?.members
+                                                : Array.isArray(response.data?.teamMembers)
+                                                    ? response.data?.teamMembers
+                                                    : [],
+                                        },
                 });
                 if (tab === "edit") {
                     setActiveTab("job-description");
@@ -345,6 +359,18 @@ export default function ManageCareerPage() {
             status: career?.status || "",
             screeningSetting: career?.screeningSetting || "",
             requireVideo: career?.requireVideo === null || career?.requireVideo === undefined ? true : career?.requireVideo,
+                        teamMembers: Array.isArray(career?.teamMembers)
+                            ? career?.teamMembers
+                            : Array.isArray(career?.team?.members)
+                                ? career?.team?.members
+                                : [],
+                        team: {
+                            members: Array.isArray(career?.team?.members)
+                                ? career?.team?.members
+                                : Array.isArray(career?.teamMembers)
+                                    ? career?.teamMembers
+                                    : [],
+                        },
         });
         setIsEditing(false);
     }

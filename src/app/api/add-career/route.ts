@@ -24,6 +24,8 @@ export async function POST(request: Request) {
       country,
       province,
       employmentType,
+      salaryCurrency,
+      teamMembers,
     } = await request.json();
     // Validate required fields
     if (!jobTitle || !description || !questions || !location || !workSetup) {
@@ -78,7 +80,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "You have reached the maximum number of jobs for your plan" }, { status: 400 });
     }
 
-    const career = {
+    const normalizedTeamMembers = Array.isArray(teamMembers) ? teamMembers : [];
+
+  const career = {
       id: guid(),
       jobTitle,
       description,
@@ -101,6 +105,14 @@ export async function POST(request: Request) {
       country,
       province,
       employmentType,
+      salaryCurrency:
+        typeof salaryCurrency === "string" && salaryCurrency.trim().length > 0
+          ? salaryCurrency.trim().toUpperCase()
+          : undefined,
+      teamMembers: normalizedTeamMembers,
+      team: {
+        members: normalizedTeamMembers,
+      },
     };
 
     await db.collection("careers").insertOne(career);

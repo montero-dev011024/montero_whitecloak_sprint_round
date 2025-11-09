@@ -730,6 +730,9 @@ export default function SegmentedCareerForm({
       status,
       employmentType: draft.employmentType,
       teamMembers,
+      team: {
+        members: teamMembers,
+      },
     };
   };
 
