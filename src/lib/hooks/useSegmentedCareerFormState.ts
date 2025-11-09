@@ -35,6 +35,7 @@ export interface CareerFormDraft {
     isNegotiable: boolean;
     minimum: string;
     maximum: string;
+    currency: string;
   };
   location: {
     country: string;
@@ -138,6 +139,7 @@ export const defaultCareerDraft: CareerFormDraft = {
     isNegotiable: true,
     minimum: "",
     maximum: "",
+    currency: "PHP",
   },
   location: {
     country: "Philippines",
@@ -243,6 +245,12 @@ export default function useSegmentedCareerFormState() {
             typeof career.maximumSalary === "number" && !isNaN(career.maximumSalary)
               ? String(career.maximumSalary)
               : "",
+          currency:
+            typeof career.salaryCurrency === "string" && career.salaryCurrency.trim().length > 0
+              ? career.salaryCurrency.trim().toUpperCase()
+              : typeof career.currency === "string" && career.currency.trim().length > 0
+                ? career.currency.trim().toUpperCase()
+                : "PHP",
         },
         location: {
           country: career.country || "Philippines",

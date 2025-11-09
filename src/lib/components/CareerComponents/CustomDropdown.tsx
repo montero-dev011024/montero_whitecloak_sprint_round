@@ -4,25 +4,45 @@ import { useState } from "react";
 export default function CustomDropdown(props) {
     const { onSelectSetting, screeningSetting, settingList, placeholder } = props;
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const selectedOption = settingList.find(
+    (setting) => setting.name === screeningSetting
+  );
+  const displayText = selectedOption?.name ?? screeningSetting;
+  const selectedLabel = displayText
+    ? displayText.replace(/_/g, " ")
+    : placeholder;
+  const selectedIconClass = selectedOption?.icon;
 
   return (
         <div className="dropdown w-100">
           <button
             disabled={settingList.length === 0}
             className="dropdown-btn fade-in-bottom"
-            style={{ width: "100%", textTransform: "capitalize" }}
+            style={{
+              width: "100%",
+              textTransform: "capitalize",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "8px",
+            }}
             type="button"
             onClick={() => setDropdownOpen((v) => !v)}
           >
-            <span>
-              <i
-                className={
-                  settingList.find(
-                    (setting) => setting.name === screeningSetting
-                  )?.icon
-                }
-              ></i>{" "}
-              {screeningSetting?.replace("_", " ") || placeholder}
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                maxWidth: "calc(100% - 20px)",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+              title={selectedLabel || placeholder}
+            >
+              {selectedIconClass && <i className={selectedIconClass}></i>}
+              <span>{selectedLabel || placeholder}</span>
             </span>
             <i className="la la-angle-down ml-10"></i>
           </button>
