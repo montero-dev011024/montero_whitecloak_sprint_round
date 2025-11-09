@@ -4,12 +4,14 @@ import TableLoader from "@/lib/Loader/TableLoader";
 import moment from "moment";
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import { useRouter } from "next/navigation";
 import { useAppContext } from "@/lib/context/AppContext";
 import useDebounce from "../../hooks/useDebounceHook";
 import CareerStatus from "../CareerComponents/CareerStatus";
 import { deleteCareer, candidateActionToast, errorToast } from "@/lib/Utils";
 import CustomDropdown from "../Dropdown/CustomDropdown";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
+import { defaultCareerDraft } from "@/lib/hooks/useSegmentedCareerFormState";
 import { Tooltip } from "react-tooltip";
 
 const tableHeaderStyle: any = {
@@ -89,6 +91,50 @@ export default function CareersV2Table() {
   const [activeOrg, setActiveOrg] = useLocalStorage("activeOrg", null);
   const [availableJobSlots, setAvailableJobSlots] = useState(0);
   const [totalActiveCareers, setTotalActiveCareers] = useState(0);
+  const router = useRouter();
+
+  const SEGMENTED_DRAFT_KEY = "jia-segmented-career-draft";
+  const SEGMENTED_STEP_KEY = "jia-segmented-career-step";
+
+  const resetCareerDraft = () => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(
+        SEGMENTED_DRAFT_KEY,
+        JSON.stringify(defaultCareerDraft)
+      );
+      window.localStorage.setItem(
+        SEGMENTED_STEP_KEY,
+        JSON.stringify("career-details")
+      );
+
+      window.dispatchEvent(
+        new CustomEvent("localStorageChange", {
+          detail: { key: SEGMENTED_DRAFT_KEY, value: defaultCareerDraft },
+        })
+      );
+
+      window.dispatchEvent(
+        new CustomEvent("localStorageChange", {
+          detail: { key: SEGMENTED_STEP_KEY, value: "career-details" },
+        })
+      );
+    } catch (error) {
+      console.warn("Unable to reset career draft state", error);
+    }
+  };
+
+  const handleAddNewCareer = () => {
+    if (totalActiveCareers >= availableJobSlots) {
+      return;
+    }
+
+    resetCareerDraft();
+    router.push("/recruiter-dashboard/careers/new-career");
+  };
 
   useEffect(() => {
     const fetchOrgDetails = async () => {
@@ -155,21 +201,19 @@ export default function CareersV2Table() {
     </div>
 
     <div style={{ display: "flex", flexDirection: "row", gap: 8, alignItems: "center" }}>
-    <a 
-    href="/recruiter-dashboard/careers/new-career"
-    data-tooltip-id="add-career-tooltip"
-    data-tooltip-html={`You have reached the maximum number of jobs for your plan. Please upgrade your plan to add more jobs.`}
-    >
-    <button className="button-primary-v2"
-    disabled={totalActiveCareers >= availableJobSlots}
-    style={{ 
-      opacity: totalActiveCareers >= availableJobSlots ? 0.5 : 1, 
-      cursor: totalActiveCareers >= availableJobSlots ? "not-allowed" : "pointer"
-    }}
+    <button
+      className="button-primary-v2"
+      onClick={handleAddNewCareer}
+      disabled={totalActiveCareers >= availableJobSlots}
+      data-tooltip-id="add-career-tooltip"
+      data-tooltip-html={`You have reached the maximum number of jobs for your plan. Please upgrade your plan to add more jobs.`}
+      style={{
+        opacity: totalActiveCareers >= availableJobSlots ? 0.5 : 1,
+        cursor: totalActiveCareers >= availableJobSlots ? "not-allowed" : "pointer",
+      }}
     >
       <i className="la la-plus" /> Add new career
     </button>
-    </a>
     <div className="table-search-bar" style={{ minWidth: "300px" }}>
       <div className="icon mr-2">
           <i className="la la-search"></i>
