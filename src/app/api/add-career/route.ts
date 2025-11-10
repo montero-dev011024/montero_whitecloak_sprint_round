@@ -13,7 +13,6 @@ export async function POST(request: Request) {
       createdBy,
       screeningSetting,
       orgID,
-      requireVideo,
       location,
       workSetup,
       workSetupRemarks,
@@ -26,6 +25,7 @@ export async function POST(request: Request) {
       employmentType,
       salaryCurrency,
       teamMembers,
+      cvSecretPrompt,
     } = await request.json();
     // Validate required fields
     if (!jobTitle || !description || !questions || !location || !workSetup) {
@@ -90,6 +90,7 @@ export async function POST(request: Request) {
       location,
       workSetup,
       workSetupRemarks,
+  cvSecretPrompt,
       createdAt: new Date(),
       updatedAt: new Date(),
       lastEditedBy,
@@ -97,7 +98,6 @@ export async function POST(request: Request) {
       status: status || "active",
       screeningSetting,
       orgID,
-      requireVideo,
       lastActivityAt: new Date(),
       salaryNegotiable,
       minimumSalary,

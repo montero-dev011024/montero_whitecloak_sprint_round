@@ -30,7 +30,7 @@ export interface CareerFormDraft {
   employmentType: string;
   workSetup: string;
   workSetupRemarks: string;
-  requireVideo: boolean;
+  cvSecretPrompt: string;
   salary: {
     isNegotiable: boolean;
     minimum: string;
@@ -134,7 +134,7 @@ export const defaultCareerDraft: CareerFormDraft = {
   employmentType: "",
   workSetup: "",
   workSetupRemarks: "",
-  requireVideo: true,
+  cvSecretPrompt: "",
   salary: {
     isNegotiable: true,
     minimum: "",
@@ -230,8 +230,7 @@ export default function useSegmentedCareerFormState() {
         employmentType: career.employmentType || "",
         workSetup: career.workSetup || "",
         workSetupRemarks: career.workSetupRemarks || "",
-        requireVideo:
-          typeof career.requireVideo === "boolean" ? career.requireVideo : true,
+        cvSecretPrompt: typeof career.cvSecretPrompt === "string" ? career.cvSecretPrompt : "",
         salary: {
           isNegotiable:
             typeof career.salaryNegotiable === "boolean"

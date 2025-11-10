@@ -335,7 +335,16 @@ export default function (props) {
         console.log("[Question Generator Fetch Prompt Error]", err);
       });
 
-    setQuestionGenPrompt(configData.question_gen_prompt.prompt);
+    const promptFromSettings =
+      configData?.question_gen_prompt?.prompt || "";
+
+    if (!promptFromSettings) {
+      console.warn(
+        "[Question Generator] Missing question_gen_prompt in global settings. Using empty prompt."
+      );
+    }
+
+    setQuestionGenPrompt(promptFromSettings);
   }
 
   useEffect(() => {

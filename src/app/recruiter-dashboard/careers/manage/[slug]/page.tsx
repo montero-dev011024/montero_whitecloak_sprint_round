@@ -167,8 +167,8 @@ export default function ManageCareerPage() {
         questions: [],
         status: "",
         screeningSetting: "",
-        requireVideo: false,
         directInterviewLink: "",
+        cvSecretPrompt: "",
         teamMembers: [],
         team: { members: [] },
     });
@@ -272,8 +272,8 @@ export default function ManageCareerPage() {
                     questions: deepCopy,
                     status: response.data?.status || "",
                     screeningSetting: response.data?.screeningSetting || "",
-                    requireVideo: response.data?.requireVideo === null || response.data?.requireVideo === undefined ? true : response.data?.requireVideo,
                     directInterviewLink: response.data?.directInterviewLink || "",
+                    cvSecretPrompt: response.data?.cvSecretPrompt || "",
                     createdBy: response.data?.createdBy || {},
                     minimumSalary: response.data?.minimumSalary || "",
                     maximumSalary: response.data?.maximumSalary || "",
@@ -358,7 +358,7 @@ export default function ManageCareerPage() {
             questions: career?.questions || [],
             status: career?.status || "",
             screeningSetting: career?.screeningSetting || "",
-            requireVideo: career?.requireVideo === null || career?.requireVideo === undefined ? true : career?.requireVideo,
+            cvSecretPrompt: career?.cvSecretPrompt || "",
                         teamMembers: Array.isArray(career?.teamMembers)
                             ? career?.teamMembers
                             : Array.isArray(career?.team?.members)

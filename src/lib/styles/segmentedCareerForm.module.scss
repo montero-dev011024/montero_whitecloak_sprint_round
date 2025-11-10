@@ -519,6 +519,78 @@
   color: #1f2937;
 }
 
+.dragHandleButton {
+  position: absolute;
+  top: 50%;
+  left: -55px;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  transition: background-color 0.2s ease;
+  z-index: 1;
+  outline: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+.dragHandleButton:hover {
+  background-color: #f3f4f6;
+}
+
+.dragHandleButton:active,
+.dragHandleButton:focus,
+.dragHandleButton:focus-visible {
+  cursor: grabbing;
+  outline: none;
+  box-shadow: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dragHandleDots {
+  display: grid;
+  grid-template-columns: repeat(2, 4px);
+  gap: 4px 4px;
+}
+
+.dragHandleDot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: #9ca3af;
+}
+
+.questionCardDragging {
+  opacity: 0.65;
+}
+
+.questionCardDragOver {
+  border-color: #2563eb !important;
+  background-color: #f5f9ff !important;
+}
+
+.dragTailZone {
+  width: 100%;
+  height: 36px;
+  border-radius: 12px;
+  border: 1px dashed transparent;
+  background-color: transparent;
+  overflow: hidden;
+  transition: background-color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+}
+
+.dragTailZoneActive {
+  border-color: #2563eb;
+  background-color: #f5f9ff;
+}
+
 .currencyButton:focus-visible {
   outline: 2px solid rgba(37, 99, 235, 0.35);
   outline-offset: 2px;
