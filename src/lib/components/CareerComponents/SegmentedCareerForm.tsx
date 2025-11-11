@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
 } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import classNames from "classnames";
 import axios from "axios";
 import dynamic from "next/dynamic";
@@ -57,6 +58,8 @@ interface SecretPromptFieldProps {
   withDivider?: boolean;
   iconSrc?: string;
   iconAlt?: string;
+  tooltipContent?: ReactNode;
+  tooltipAriaLabel?: string;
 }
 
 type QuestionModalAction = "" | "add" | "edit" | "delete";
@@ -78,40 +81,78 @@ const SecretPromptField = ({
   withDivider = false,
   iconSrc,
   iconAlt,
-}: SecretPromptFieldProps) => (
-  <>
-    {withDivider && <div className={styles.aiSettingDivider} aria-hidden="true"></div>}
-    <section className={classNames(styles.aiSettingSection, styles.secretPromptSection)}>
-      <div className={styles.secretPromptHeading}>
-        <span className={classNames(styles.secretPromptGlyph, iconSrc && styles.secretPromptGlyphImage)} aria-hidden="true">
-          {iconSrc ? (
-            // Decorative image next to label; aria-hidden on wrapper keeps it non-announced
-            <img src={iconSrc} alt={iconAlt || ""} className={styles.secretPromptGlyphImg} />
-          ) : (
-            <i className="la la-sparkles"></i>
-          )}
-        </span>
-        <div className={styles.secretPromptTitleGroup}>
-          <div className={styles.secretPromptTitleRow}>
-            <h3>{label}</h3>
-            <span className={styles.optionalTag}>(optional)</span>
-            <i className="la la-question-circle" aria-hidden="true"></i>
+  tooltipContent,
+  tooltipAriaLabel,
+}: SecretPromptFieldProps) => {
+  const [isTooltipVisible, setIsTooltipVisible] = useState(false);
+  const tooltipId = `${inputId}-tooltip`;
+
+  const showTooltip = () => setIsTooltipVisible(true);
+  const hideTooltip = () => setIsTooltipVisible(false);
+
+  return (
+    <>
+      {withDivider && <div className={styles.aiSettingDivider} aria-hidden="true"></div>}
+      <section className={classNames(styles.aiSettingSection, styles.secretPromptSection)}>
+        <div className={styles.secretPromptHeading}>
+          <span className={classNames(styles.secretPromptGlyph, iconSrc && styles.secretPromptGlyphImage)} aria-hidden="true">
+            {iconSrc ? (
+              // Decorative image next to label; aria-hidden on wrapper keeps it non-announced
+              <img src={iconSrc} alt={iconAlt || ""} className={styles.secretPromptGlyphImg} />
+            ) : (
+              <i className="la la-sparkles"></i>
+            )}
+          </span>
+          <div className={styles.secretPromptTitleGroup}>
+            <div className={styles.secretPromptTitleRow}>
+              <h3>{label}</h3>
+              <span className={styles.optionalTag}>(optional)</span>
+              {tooltipContent && (
+                <span
+                  className={styles.secretPromptTooltipWrapper}
+                  onMouseEnter={showTooltip}
+                  onMouseLeave={hideTooltip}
+                >
+                  <button
+                    type="button"
+                    className={styles.secretPromptInfoButton}
+                    aria-label={tooltipAriaLabel || "Learn more"}
+                    aria-describedby={tooltipId}
+                    onFocus={showTooltip}
+                    onBlur={hideTooltip}
+                  >
+                    <i className="la la-question-circle" aria-hidden="true"></i>
+                  </button>
+                  <span
+                    id={tooltipId}
+                    role="tooltip"
+                    className={classNames(
+                      styles.secretPromptTooltip,
+                      isTooltipVisible && styles.secretPromptTooltipVisible
+                    )}
+                    aria-hidden={!isTooltipVisible}
+                  >
+                    {tooltipContent}
+                  </span>
+                </span>
+              )}
+            </div>
+            <p id={descriptionId}>{helper}</p>
           </div>
-          <p id={descriptionId}>{helper}</p>
         </div>
-      </div>
-      <textarea
-        className={styles.secretPromptInput}
-        id={inputId}
-        aria-describedby={descriptionId}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        rows={5}
-      ></textarea>
-    </section>
-  </>
-);
+        <textarea
+          className={styles.secretPromptInput}
+          id={inputId}
+          aria-describedby={descriptionId}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          rows={5}
+        ></textarea>
+      </section>
+    </>
+  );
+};
 
 const SUGGESTED_PRE_SCREENING_QUESTIONS: SuggestedPreScreenQuestion[] = [
   {
@@ -2484,17 +2525,7 @@ export default function SegmentedCareerForm({
           (!teamMembers || teamMembers.length > 0)
         );
       case "cv-screening":
-        return (
-          isDescriptionPresent(draft.description) &&
-          questions.some(
-            (group) =>
-              Array.isArray(group.questions) &&
-              group.questions.some(
-                (entry: any) =>
-                  typeof entry?.question === "string" && entry.question.trim().length > 0
-              )
-          )
-        );
+        return true;
       case "ai-setup":
         return totalInterviewQuestionCount >= 5;
       case "pipeline":
@@ -2664,8 +2695,14 @@ export default function SegmentedCareerForm({
       }
 
       if (!isStepComplete("ai-setup")) {
+        const alreadyOnAiStep = activeStep === "ai-setup";
+
         setActiveStep("ai-setup");
-        setShowAiQuestionValidation(true);
+        if (alreadyOnAiStep) {
+          setShowAiQuestionValidation(true);
+        } else {
+          setShowAiQuestionValidation(false);
+        }
 
         return;
       }
@@ -2790,138 +2827,98 @@ export default function SegmentedCareerForm({
   }, [draft.context?.lastPersistedAt, career?.updatedAt]);
 
   const renderCareerReviewSection = () => {
-    const jobInformationRows: Array<
-      Array<{
-        label: string;
-        value: string;
-        colSpan?: number;
-        emphasis?: boolean;
-      }>
-    > = [
-      [
-        {
-          label: "Job Title",
-          value: draft.jobTitle || "Not specified",
-          emphasis: true,
-        },
-      ],
-      [
-        {
-          label: "Employment Type",
-          value: draft.employmentType || "Not specified",
-        },
-        {
-          label: "Work Arrangement",
-          value: draft.workSetup || "Not specified",
-        },
-      ],
-      [
-        {
-          label: "Country",
-          value: draft.location.country || "Not specified",
-        },
-        {
-          label: "State / Province",
-          value: draft.location.province || "Not specified",
-        },
-        {
-          label: "City",
-          value: draft.location.city || "Not specified",
-        },
-      ],
-      [
-        {
-          label: "Minimum Salary",
-          value: minimumSalaryDisplay,
-        },
-        {
-          label: "Maximum Salary",
-          value: maximumSalaryDisplay,
-        },
-      ],
-    ];
-
     return (
-      <div className={styles.reviewAccordionBody}>
-        <div className={styles.reviewMetaRow}>
-          <span>Last saved: {lastSavedTimestamp}</span>
-        </div>
-        <div className={classNames(styles.reviewSectionGroup, styles.reviewSectionFlush)}>
-          <div className={styles.reviewDataTable}>
-            {jobInformationRows.map((row, rowIndex) => {
-              const columnCount = row.reduce((total, cell) => total + (cell.colSpan ?? 1), 0);
-              return (
-                <div
-                  key={`career-info-row-${rowIndex}`}
-                  className={styles.reviewDataRow}
-                  data-columns={columnCount}
-                >
-                  {row.map((cell, cellIndex) => (
-                    <div
-                      key={`career-info-cell-${rowIndex}-${cellIndex}`}
-                      className={classNames(styles.reviewDataCell, {
-                        [styles.reviewDataCellEmphasis]: cell.emphasis,
-                      })}
-                      style={
-                        cell.colSpan && cell.colSpan > 1
-                          ? ({ gridColumn: `span ${cell.colSpan}` } as CSSProperties)
-                          : undefined
-                      }
-                    >
-                      <span className={styles.reviewDataLabel}>{cell.label}</span>
-                      <span className={styles.reviewDataValue}>{cell.value}</span>
-                    </div>
-                  ))}
-                </div>
-              );
-            })}
+      <div className={classNames(styles.reviewAccordionBody, styles.reviewCareerBody)}>
+        <div className={styles.reviewCareerCard}>
+          <div className={styles.reviewCareerSection}>
+            <h5 className={styles.reviewCareerFieldLabel}>Job Title</h5>
+            <p className={styles.reviewCareerFieldValue}>{draft.jobTitle || "Not specified"}</p>
           </div>
-        </div>
-        <div className={styles.reviewSectionGroup}>
-          <h5 className={styles.reviewSectionTitle}>Job Description</h5>
-          {jobDescriptionMarkup ? (
-            <div
-              className={classNames(styles.reviewRichText, styles.reviewRichTextFramed)}
-              dangerouslySetInnerHTML={jobDescriptionMarkup}
-            ></div>
-          ) : (
-            <p className={styles.reviewEmptyState}>No description provided.</p>
-          )}
-        </div>
-        <div className={styles.reviewSectionGroup}>
-          <h5 className={styles.reviewSectionTitle}>Team Access</h5>
-          {teamMembers.length ? (
-            <div className={styles.reviewTeamTable}>
-              {teamMembers.map((member: any) => {
-                const displayName = member.name || member.email || "Member";
-                const displayEmail = member.email || "—";
-                return (
-                  <div key={member.memberId} className={styles.reviewTeamRow}>
-                    <div className={styles.reviewTeamIdentity}>
-                      {member.image ? (
-                        <img
-                          src={member.image}
-                          alt={displayName}
-                          className={styles.reviewTeamAvatarImage}
-                        />
-                      ) : (
-                        <span className={styles.reviewTeamAvatarFallback} aria-hidden="true">
-                          {(displayName || "?").charAt(0)}
-                        </span>
-                      )}
-                      <div className={styles.reviewTeamPrimary}>
-                        <span className={styles.reviewTeamName}>{displayName}</span>
-                        <span className={styles.reviewTeamEmail}>{displayEmail}</span>
+
+          <div className={styles.reviewCareerFieldsGrid}>
+            <div className={styles.reviewCareerSection}>
+              <h5 className={styles.reviewCareerFieldLabel}>Employment Type</h5>
+              <p className={styles.reviewCareerFieldValue}>{draft.employmentType || "Not specified"}</p>
+            </div>
+            <div className={styles.reviewCareerSection}>
+              <h5 className={styles.reviewCareerFieldLabel}>Work Arrangement</h5>
+              <p className={styles.reviewCareerFieldValue}>{draft.workSetup || "Not specified"}</p>
+            </div>
+          </div>
+
+          <div className={styles.reviewCareerFieldsGrid3}>
+            <div className={styles.reviewCareerSection}>
+              <h5 className={styles.reviewCareerFieldLabel}>Country</h5>
+              <p className={styles.reviewCareerFieldValue}>{draft.location.country || "Not specified"}</p>
+            </div>
+            <div className={styles.reviewCareerSection}>
+              <h5 className={styles.reviewCareerFieldLabel}>State / Province</h5>
+              <p className={styles.reviewCareerFieldValue}>{draft.location.province || "Not specified"}</p>
+            </div>
+            <div className={styles.reviewCareerSection}>
+              <h5 className={styles.reviewCareerFieldLabel}>City</h5>
+              <p className={styles.reviewCareerFieldValue}>{draft.location.city || "Not specified"}</p>
+            </div>
+          </div>
+
+          <div className={styles.reviewCareerFieldsGrid}>
+            <div className={styles.reviewCareerSection}>
+              <h5 className={styles.reviewCareerFieldLabel}>Minimum Salary</h5>
+              <p className={styles.reviewCareerFieldValue}>{minimumSalaryDisplay}</p>
+            </div>
+            <div className={styles.reviewCareerSection}>
+              <h5 className={styles.reviewCareerFieldLabel}>Maximum Salary</h5>
+              <p className={styles.reviewCareerFieldValue}>{maximumSalaryDisplay}</p>
+            </div>
+          </div>
+
+          <div className={styles.reviewCareerDivider} aria-hidden="true"></div>
+          <div className={styles.reviewCareerSection}>
+            <h5 className={styles.reviewCareerFieldLabel}>Job Description</h5>
+            {jobDescriptionMarkup ? (
+              <div
+                className={classNames(styles.reviewRichText, styles.reviewRichTextFramed)}
+                dangerouslySetInnerHTML={jobDescriptionMarkup}
+              ></div>
+            ) : (
+              <p className={styles.reviewEmptyState}>No description provided.</p>
+            )}
+          </div>
+          <div className={styles.reviewCareerDivider} aria-hidden="true"></div>
+          <div className={styles.reviewCareerSection}>
+            <h5 className={styles.reviewCareerFieldLabel}>Team Access</h5>
+            {teamMembers.length ? (
+              <div className={styles.reviewTeamTable}>
+                {teamMembers.map((member: any) => {
+                  const displayName = member.name || member.email || "Member";
+                  const displayEmail = member.email || "—";
+                  return (
+                    <div key={member.memberId} className={styles.reviewTeamRow}>
+                      <div className={styles.reviewTeamIdentity}>
+                        {member.image ? (
+                          <img
+                            src={member.image}
+                            alt={displayName}
+                            className={styles.reviewTeamAvatarImage}
+                          />
+                        ) : (
+                          <span className={styles.reviewTeamAvatarFallback} aria-hidden="true">
+                            {(displayName || "?").charAt(0)}
+                          </span>
+                        )}
+                        <div className={styles.reviewTeamPrimary}>
+                          <span className={styles.reviewTeamName}>{displayName}</span>
+                          <span className={styles.reviewTeamEmail}>{displayEmail}</span>
+                        </div>
                       </div>
                     </div>
-                    <span className={styles.reviewTeamRole}>{getMemberRoleLabel(member.role)}</span>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className={styles.reviewEmptyState}>No team members assigned.</p>
-          )}
+                  );
+                })}
+              </div>
+            ) : (
+              <p className={styles.reviewEmptyState}>No team members assigned.</p>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -2946,14 +2943,6 @@ export default function SegmentedCareerForm({
               <p className={styles.reviewCvTitle}>CV Screening</p>
               <p className={styles.reviewCvDescription}>{screeningDescription}</p>
             </div>
-            <button
-              type="button"
-              className={styles.reviewCvEditButton}
-              onClick={() => setActiveStep("cv-screening")}
-              aria-label="Edit CV screening settings"
-            >
-              <i className="la la-pen"></i>
-            </button>
           </div>
 
           <div className={styles.reviewCvDivider} aria-hidden="true"></div>
@@ -2961,9 +2950,11 @@ export default function SegmentedCareerForm({
           <section className={styles.reviewCvSection}>
             <header className={styles.reviewCvSectionHeader}>
               <div className={styles.reviewCvSectionTitleGroup}>
-                <span className={styles.reviewCvSectionIcon} aria-hidden="true">
-                  ✨
-                </span>
+                <img
+                  alt="CV Secret Prompt"
+                  className={styles.secretPromptGlyphImg}
+                  src="/assets/icons/ai-sparkles.svg"
+                />
                 <span className={styles.reviewCvSectionTitle}>CV Secret Prompt</span>
               </div>
             </header>
@@ -3056,14 +3047,6 @@ export default function SegmentedCareerForm({
               <p className={styles.reviewAiTitle}>AI Interview Screening</p>
               <p className={styles.reviewAiDescription}>{screeningDescription}</p>
             </div>
-            <button
-              type="button"
-              className={styles.reviewAiEditButton}
-              onClick={() => setActiveStep("ai-setup")}
-              aria-label="Edit AI interview setup"
-            >
-              <i className="la la-pen"></i>
-            </button>
           </div>
 
           <div className={styles.reviewAiMetaRow}>
@@ -3085,9 +3068,11 @@ export default function SegmentedCareerForm({
           <section className={styles.reviewAiSection}>
             <header className={styles.reviewAiSectionHeader}>
               <div className={styles.reviewAiSectionTitleGroup}>
-                <span className={styles.reviewAiSectionIcon} aria-hidden="true">
-                  ✨
-                </span>
+                <img
+                  alt="AI Interview Secret Prompt"
+                  className={styles.secretPromptGlyphImg}
+                  src="/assets/icons/ai-sparkles.svg"
+                />
                 <span className={styles.reviewAiSectionTitle}>AI Interview Secret Prompt</span>
               </div>
             </header>
@@ -3154,6 +3139,39 @@ export default function SegmentedCareerForm({
     );
   };
 
+  const reviewSectionTargetStep: Record<ReviewSectionKey, SegmentedCareerStep> = {
+    career: "career-details",
+    cv: "cv-screening",
+    ai: "ai-setup",
+  };
+
+  const handleReviewSectionEdit = (
+    sectionKey: ReviewSectionKey,
+    event: ReactMouseEvent<HTMLButtonElement>
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const targetStep = reviewSectionTargetStep[sectionKey];
+    if (!targetStep) {
+      return;
+    }
+
+    setActiveStep(targetStep);
+
+    if (sectionKey === "career") {
+      setShowCareerDetailsErrors(false);
+    }
+
+    if (sectionKey === "cv") {
+      setShowCvScreeningValidation(false);
+    }
+
+    if (sectionKey === "ai") {
+      setShowAiQuestionValidation(false);
+    }
+  };
+
   const reviewSections: Array<{
     key: ReviewSectionKey;
     title: string;
@@ -3165,29 +3183,21 @@ export default function SegmentedCareerForm({
       key: "career",
       title: "Career Details & Team Access",
       subtitle: "Step 1",
-      meta: draft.jobTitle || "No job title yet",
+      meta: "",
       render: renderCareerReviewSection,
     },
     {
       key: "cv",
       title: "CV Review & Pre-Screening",
       subtitle: "Step 2",
-      meta: formatCountLabel(
-        preScreeningQuestions.length,
-        "Pre-screen question",
-        "Pre-screen questions"
-      ),
+      meta: "",
       render: renderCvReviewSection,
     },
     {
       key: "ai",
       title: "AI Interview Setup",
       subtitle: "Step 3",
-      meta: formatCountLabel(
-        totalInterviewQuestionCount,
-        "Interview question",
-        "Interview questions"
-      ),
+      meta: "",
       render: renderAiReviewSection,
     },
   ];
@@ -3938,6 +3948,14 @@ export default function SegmentedCareerForm({
                     placeholder="Enter a CV secret prompt (e.g. Emphasize candidates with product-led growth experience in SaaS)."
                     value={draft.cvSecretPrompt || ""}
                     onChange={(nextValue) => updateDraft({ cvSecretPrompt: nextValue })}
+                    iconSrc="/assets/icons/ai-sparkles.svg"
+                    iconAlt="CV Secret Prompt"
+                    tooltipContent={
+                      <>
+                        These prompts remain hidden from candidates and the public job portal. Additionally, only Admins and the Job Owner can view the secret prompt.
+                      </>
+                    }
+                    tooltipAriaLabel="Learn more about CV secret prompts"
                   />
                 </div>
               </div>
@@ -4880,7 +4898,10 @@ export default function SegmentedCareerForm({
                                             <div className={styles.aiQuestionListActions}>
                                               <button
                                                 type="button"
-                                                className={styles.aiQuestionListButton}
+                                                className={classNames(
+                                                  styles.aiQuestionListButton,
+                                                  styles.aiQuestionListButtonWithLabel
+                                                )}
                                                 onClick={() =>
                                                   openQuestionModal("edit", group.id, {
                                                     id: questionId,
@@ -4889,11 +4910,12 @@ export default function SegmentedCareerForm({
                                                 }
                                                 aria-label="Edit interview question"
                                               >
-                                                <i className="la la-edit" aria-hidden="true"></i>
+                                                <i className="la la-pen" aria-hidden="true"></i>
+                                                <span className={styles.aiQuestionListButtonLabel}>Edit</span>
                                               </button>
                                               <button
                                                 type="button"
-                                                className={styles.aiQuestionListButton}
+                                                className={classNames(styles.aiQuestionListButton, styles.aiQuestionListButtonDelete)}
                                                 onClick={() =>
                                                   openQuestionModal("delete", group.id, {
                                                     id: questionId,
@@ -5027,27 +5049,44 @@ export default function SegmentedCareerForm({
                         [styles.reviewAccordionItemOpen]: isOpen,
                       })}
                     >
-                      <button
-                        type="button"
+                      <div
                         className={classNames(styles.reviewAccordionHeader, {
                           [styles.reviewAccordionHeaderOpen]: isOpen,
                         })}
-                        onClick={() => toggleReviewSection(section.key)}
-                        aria-expanded={isOpen}
                       >
-                        <div className={styles.reviewAccordionHeaderLeft}>
-                          <span className={styles.reviewAccordionTitle}>{section.title}</span>
-                          <span className={styles.reviewAccordionSubtitle}>{section.subtitle}</span>
-                        </div>
-                        <div className={styles.reviewAccordionHeaderRight}>
-                          <span className={styles.reviewAccordionMeta}>{section.meta}</span>
-                          <span className={styles.reviewAccordionIcon} aria-hidden="true">
+                        <button
+                          type="button"
+                          className={styles.reviewAccordionToggle}
+                          onClick={() => toggleReviewSection(section.key)}
+                          aria-expanded={isOpen}
+                        >
+                          <span
+                            className={classNames(
+                              styles.reviewAccordionIcon,
+                              styles.reviewAccordionChevron
+                            )}
+                            aria-hidden="true"
+                          >
                             <i
                               className={classNames("la", isOpen ? "la-angle-up" : "la-angle-down")}
                             ></i>
                           </span>
+                          <div className={styles.reviewAccordionHeaderLeft}>
+                            <span className={styles.reviewAccordionTitle}>{section.title}</span>
+                            <span className={styles.reviewAccordionSubtitle}>{section.subtitle}</span>
+                          </div>
+                        </button>
+                        <div className={styles.reviewAccordionHeaderRight}>
+                          <button
+                            type="button"
+                            className={styles.reviewAccordionEditButton}
+                            onClick={(event) => handleReviewSectionEdit(section.key, event)}
+                            aria-label={`Edit ${section.title}`}
+                          >
+                            <i className="la la-pen" aria-hidden="true"></i>
+                          </button>
                         </div>
-                      </button>
+                      </div>
                       {isOpen && section.render()}
                     </div>
                   );

@@ -68,6 +68,13 @@
   cursor: not-allowed;
 }
 
+.aiQuestionListButtonLabel {
+  font-size: 14px;
+  font-weight: 600;
+  margin-left: 8px;
+  color: inherit;
+}
+
 .primaryButton {
   background-color: #18181b;
   color: #fff;
@@ -385,13 +392,13 @@
 .aiQuestionsValidation {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
+  gap: 16px;
+  padding: 20px 24px;
   border-radius: 12px;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  color: #b91c1c;
-  font-size: 14px;
+  background: transparent;
+  border: none;
+  color: #dc2626;
+  font-size: 16px;
   font-weight: 600;
 }
 
@@ -399,26 +406,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  flex-shrink: 0;
 }
 
 .aiQuestionsValidationIcon i {
-  font-size: 18px;
-  color: #ef4444;
-}
-
-.aiQuestionsValidationIcon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
-  border: 1px solid #fca5a5;
-  font-size: 16px;
-  color: #b91c1c;
+  font-size: 32px;
+  color: #dc2626;
 }
 
 .aiSettingSection {
@@ -734,6 +727,41 @@
   border-color: #cbd5e1;
 }
 
+.aiQuestionListButtonDelete {
+  color: #dc2626;
+  border-color: #fca5a5;
+}
+
+.aiQuestionListButtonDelete:hover {
+  background: #fef2f2;
+  border-color: #f87171;
+  color: #b91c1c;
+}
+
+.aiQuestionListButtonWithLabel {
+  width: auto;
+  height: auto;
+  min-height: 34px;
+  border-radius: 999px;
+  border: 1px solid #d0d5dd;
+  background: #ffffff;
+  color: #344054;
+  padding: 6px 16px;
+  gap: 8px;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.aiQuestionListButtonWithLabel i {
+  font-size: 16px;
+}
+
+.aiQuestionListButtonWithLabel:hover,
+.aiQuestionListButtonWithLabel:focus-visible {
+  background-color: #f9fafb;
+  border-color: #cbd5e1;
+  color: #1f2937;
+}
+
 .aiQuestionEmpty {
   display: inline-flex;
   align-items: center;
@@ -905,6 +933,42 @@
   color: #9ca3af;
 }
 
+.secretPromptTooltipWrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.secretPromptInfoButton {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+.secretPromptInfoButton:focus-visible {
+  color: #4b5563;
+}
+
+.secretPromptInfoButton:focus-visible {
+  outline: 2px solid #6366f1;
+
+}
+
+.secretPromptTooltip::after {
+  content: "";
+  position: absolute;
+  top: -6px;
+  right: 24px;
+  border: 6px solid transparent;
+  border-bottom-color: #111827;
+}
+
+.secretPromptTooltipVisible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
 .secretPromptTitleGroup p {
   margin: 0;
   font-size: 14px;
@@ -935,8 +999,8 @@
   box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
 }
 
-.sectionContainer {
-  border: 1px solid #e5e7eb;
+  justify-content: center;
+  padding: 8px;
   border-radius: 8px;
   padding: 20px;
   background-color: #fff;
@@ -948,6 +1012,26 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: #475569;
+.aiQuestionListButtonWithLabel {
+  border: 1px solid #d0d5dd;
+  border-radius: 999px;
+  padding: 6px 16px;
+  background-color: #ffffff;
+  color: #344054;
+  gap: 8px;
+}
+
+.aiQuestionListButtonWithLabel i {
+  font-size: 16px;
+}
+
+.aiQuestionListButtonWithLabel:hover:not(:disabled),
+.aiQuestionListButtonWithLabel:focus-visible {
+  background-color: #f9fafb;
+  border-color: #cbd5e1;
+  color: #1f2937;
+}
+
 }
 
 .sectionTitle {
@@ -1244,9 +1328,12 @@
 .currencyMenuItem i {
   font-size: 20px;
   background: linear-gradient(180deg, #9fcaed 0%, #ceb6da 33%, #ebacc9 66%, #fccec0 100%);
+  background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  background-clip: text;
+  font-size: 14px;
+  font-weight: 600;
+  color: inherit;
   color: transparent;
 }
 
@@ -1554,37 +1641,14 @@
   margin-bottom: 12px;
 }
 
-.reviewAccordion {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.reviewAccordionItem {
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  border-radius: 18px;
-  background: #ffffff;
-  box-shadow: 0 6px 20px rgba(148, 163, 184, 0.12);
-  overflow: hidden;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
-}
-
-.reviewAccordionItemOpen {
-  border-color: rgba(15, 23, 42, 0.18);
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
-  transform: translateY(-2px);
-}
-
 .reviewAccordionHeader {
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border: none;
   background: transparent;
   padding: 20px 24px;
-  cursor: pointer;
-  text-align: left;
+  gap: 16px;
   transition: background-color 0.2s ease;
 }
 
@@ -1592,21 +1656,43 @@
   background: rgba(248, 250, 252, 0.85);
 }
 
-
-.reviewAccordionHeader:focus {
-  outline: none;
-  box-shadow: none;
-}
-
-.reviewAccordionHeader:focus-visible {
-  outline: none;
-  box-shadow: none;
-}
-
-
-
 .reviewAccordionHeaderOpen {
   background: rgba(248, 250, 252, 0.95);
+}
+
+.reviewAccordionItem {
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 12px;
+  background: #ffffff;
+  overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.reviewAccordionItemOpen {
+  border-color: rgba(148, 163, 184, 0.4);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
+.reviewAccordionToggle {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.reviewAccordionToggle:focus {
+  outline: none;
+}
+
+.reviewAccordionToggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+  border-radius: 12px;
 }
 
 .reviewAccordionHeaderLeft {
@@ -1634,6 +1720,7 @@
   align-items: center;
   gap: 12px;
   color: #475569;
+  flex-shrink: 0;
 }
 
 .reviewAccordionMeta {
@@ -1654,13 +1741,49 @@
   font-size: 16px;
 }
 
+.reviewAccordionChevron {
+  flex-shrink: 0;
+}
+
+.reviewAccordionEditButton {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid #d5d7da;
+  background: #f8fafc;
+  color: #1f2937;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.reviewAccordionEditButton i {
+  font-size: 16px;
+}
+
+.reviewAccordionEditButton:hover,
+.reviewAccordionEditButton:focus-visible {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #4338ca;
+  outline: none;
+}
+
 .reviewAccordionBody {
   padding: 20px 24px 24px;
   border-top: 1px solid rgba(226, 232, 240, 0.9);
   display: flex;
   flex-direction: column;
   gap: 24px;
-  background: #ffffff;
+  background: #f8fafc;
+}
+
+.reviewAccordion {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .reviewStandaloneContainer {
@@ -1990,7 +2113,69 @@
 }
 
 .reviewCvBody {
-  background: #fdfdff;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.reviewCareerBody {
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.reviewCareerCard {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  border-radius: 20px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: #ffffff;
+  padding: 24px;
+  box-shadow: 0 8px 26px rgba(15, 23, 42, 0.08);
+}
+
+.reviewCareerSection {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.reviewCareerFieldLabel {
+  font-size: 13px;
+  font-weight: 500;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0;
+}
+
+.reviewCareerFieldValue {
+  font-size: 15px;
+  font-weight: 400;
+  color: #1e293b;
+  margin: 0;
+}
+
+.reviewCareerFieldsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+}
+
+.reviewCareerFieldsGrid3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.reviewCareerDivider {
+  width: 100%;
+  height: 1px;
+  border: none;
+  background: linear-gradient(90deg, rgba(148, 163, 184, 0), rgba(148, 163, 184, 0.4), rgba(148, 163, 184, 0));
 }
 
 .reviewCvCard {
@@ -1999,7 +2184,7 @@
   gap: 20px;
   border-radius: 20px;
   border: 1px solid rgba(148, 163, 184, 0.25);
-  background: #f8faff;
+  background: #ffffff;
   padding: 24px;
   box-shadow: 0 8px 26px rgba(15, 23, 42, 0.08);
 }
@@ -2045,34 +2230,6 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-}
-
-.reviewCvEditButton {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: 1px solid transparent;
-  background: rgba(148, 163, 184, 0.2);
-  color: #475569;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
-}
-
-.reviewCvEditButton:hover {
-  background: rgba(148, 163, 184, 0.28);
-  color: #111827;
-}
-
-.reviewCvEditButton:focus {
-  outline: none;
-}
-
-.reviewCvEditButton:focus-visible {
-  outline: 2px solid rgba(30, 64, 175, 0.35);
-  outline-offset: 2px;
 }
 
 .reviewCvDivider {
@@ -2183,7 +2340,10 @@
 }
 
 .reviewAiBody {
-  background: #fdfdff;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .reviewAiCard {
