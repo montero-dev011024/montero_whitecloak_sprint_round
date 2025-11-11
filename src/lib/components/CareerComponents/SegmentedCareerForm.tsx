@@ -23,8 +23,6 @@ import {
   interviewQuestionCategoryMap,
 } from "@/lib/Utils";
 import { useAppContext } from "@/lib/context/AppContext";
-import CustomDropdown from "@/lib/components/CareerComponents/CustomDropdown";
-import locations from "../../../../public/philippines-locations.json";
 import CareerActionModal from "@/lib/components/CareerComponents/CareerActionModal";
 import FullScreenLoadingAnimation from "@/lib/components/CareerComponents/FullScreenLoadingAnimation";
 import InterviewQuestionModal from "@/lib/components/CareerComponents/InterviewQuestionModal";
@@ -34,33 +32,25 @@ import useSegmentedFormState, {
   createDefaultQuestionGroups,
   QuestionGroup,
 } from "@/lib/hooks/useSegmentedCareerFormState";
-type PreScreenQuestionType = "dropdown" | "short_text" | "long_text" | "checkboxes" | "range";
-
-interface SuggestedPreScreenQuestion {
-  label: string;
-  prompt: string;
-  answerType?: PreScreenQuestionType;
-  defaultOptions?: string[];
-  rangeDefaults?: {
-    min?: string;
-    max?: string;
-  };
-}
-
-interface SecretPromptFieldProps {
-  inputId: string;
-  descriptionId: string;
-  label: string;
-  helper: string;
-  placeholder: string;
-  value: string;
-  onChange: (nextValue: string) => void;
-  withDivider?: boolean;
-  iconSrc?: string;
-  iconAlt?: string;
-  tooltipContent?: ReactNode;
-  tooltipAriaLabel?: string;
-}
+import { ReviewSectionKey } from "./SegmentedCareerForm/segmentTypes";
+import CareerDetailsTeamAccessStep from "./SegmentedCareerForm/steps/CareerDetailsTeamAccessStep";
+import PipelineStagesStep from "./SegmentedCareerForm/steps/PipelineStagesStep";
+import ReviewCareerStep from "./SegmentedCareerForm/steps/ReviewCareerStep";
+import {
+  CURRENCY_SYMBOLS,
+  INTERVIEW_QUESTION_COUNT,
+  PreScreenQuestionType,
+  QUESTION_ORIGIN,
+  QuestionOrigin,
+  SCREENING_SETTING_OPTIONS,
+  SEGMENTED_DRAFT_STORAGE_KEY,
+  SUGGESTED_PRE_SCREENING_QUESTIONS,
+  SuggestedPreScreenQuestion,
+  getPreScreenTypeLabel,
+  PRE_SCREEN_TYPE_OPTIONS,
+} from "./SegmentedCareerForm/constants";
+import CvReviewPreScreeningStep from "./SegmentedCareerForm/steps/CvReviewPreScreeningStep";
+import AiInterviewSetupStep from "./SegmentedCareerForm/steps/AiInterviewSetupStep";
 
 type QuestionModalAction = "" | "add" | "edit" | "delete";
 
@@ -70,140 +60,7 @@ interface QuestionModalState {
   questionToEdit?: { id: string | number; question: string };
 }
 
-const SecretPromptField = ({
-  inputId,
-  descriptionId,
-  label,
-  helper,
-  placeholder,
-  value,
-  onChange,
-  withDivider = false,
-  iconSrc,
-  iconAlt,
-  tooltipContent,
-  tooltipAriaLabel,
-}: SecretPromptFieldProps) => {
-  const [isTooltipVisible, setIsTooltipVisible] = useState(false);
-  const tooltipId = `${inputId}-tooltip`;
-
-  const showTooltip = () => setIsTooltipVisible(true);
-  const hideTooltip = () => setIsTooltipVisible(false);
-
-  return (
-    <>
-      {withDivider && <div className={styles.aiSettingDivider} aria-hidden="true"></div>}
-      <section className={classNames(styles.aiSettingSection, styles.secretPromptSection)}>
-        <div className={styles.secretPromptHeading}>
-          <span className={classNames(styles.secretPromptGlyph, iconSrc && styles.secretPromptGlyphImage)} aria-hidden="true">
-            {iconSrc ? (
-              // Decorative image next to label; aria-hidden on wrapper keeps it non-announced
-              <img src={iconSrc} alt={iconAlt || ""} className={styles.secretPromptGlyphImg} />
-            ) : (
-              <i className="la la-sparkles"></i>
-            )}
-          </span>
-          <div className={styles.secretPromptTitleGroup}>
-            <div className={styles.secretPromptTitleRow}>
-              <h3>{label}</h3>
-              <span className={styles.optionalTag}>(optional)</span>
-              {tooltipContent && (
-                <span
-                  className={styles.secretPromptTooltipWrapper}
-                  onMouseEnter={showTooltip}
-                  onMouseLeave={hideTooltip}
-                >
-                  <button
-                    type="button"
-                    className={styles.secretPromptInfoButton}
-                    aria-label={tooltipAriaLabel || "Learn more"}
-                    aria-describedby={tooltipId}
-                    onFocus={showTooltip}
-                    onBlur={hideTooltip}
-                  >
-                    <i className="la la-question-circle" aria-hidden="true"></i>
-                  </button>
-                  <span
-                    id={tooltipId}
-                    role="tooltip"
-                    className={classNames(
-                      styles.secretPromptTooltip,
-                      isTooltipVisible && styles.secretPromptTooltipVisible
-                    )}
-                    aria-hidden={!isTooltipVisible}
-                  >
-                    {tooltipContent}
-                  </span>
-                </span>
-              )}
-            </div>
-            <p id={descriptionId}>{helper}</p>
-          </div>
-        </div>
-        <textarea
-          className={styles.secretPromptInput}
-          id={inputId}
-          aria-describedby={descriptionId}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          placeholder={placeholder}
-          rows={5}
-        ></textarea>
-      </section>
-    </>
-  );
-};
-
-const SUGGESTED_PRE_SCREENING_QUESTIONS: SuggestedPreScreenQuestion[] = [
-  {
-    label: "Notice Period",
-    prompt: "How long is your notice period?",
-    answerType: "dropdown",
-    defaultOptions: ["Immediately", "< 30 days", "> 30 days"],
-  },
-  {
-    label: "Work Setup",
-    prompt: "How often are you willing to report to the office each week?",
-    answerType: "dropdown",
-    defaultOptions: ["Fully remote", "1-2 days", "3+ days"],
-  },
-  {
-    label: "Asking Salary",
-    prompt: "How much is your expected monthly salary?",
-    answerType: "range",
-  },
-];
-
-const PRE_SCREEN_TYPE_OPTIONS: Array<{
-  value: PreScreenQuestionType;
-  label: string;
-  icon: string;
-}> = [
-  { value: "short_text", label: "Short Answer", icon: "la la-user" },
-  { value: "long_text", label: "Long Answer", icon: "la la-align-left" },
-  { value: "dropdown", label: "Dropdown", icon: "la la-list" },
-  { value: "checkboxes", label: "Checkboxes", icon: "la la-check-square" },
-  { value: "range", label: "Range", icon: "la la-sliders-h" },
-];
-
-const PRE_SCREEN_TYPE_LABEL_MAP: Record<PreScreenQuestionType, string> = PRE_SCREEN_TYPE_OPTIONS.reduce(
-  (acc, option) => {
-    acc[option.value] = option.label;
-    return acc;
-  },
-  {} as Record<PreScreenQuestionType, string>
-);
-
-const getPreScreenTypeLabel = (type: PreScreenQuestionType) =>
-  PRE_SCREEN_TYPE_LABEL_MAP[type] || PRE_SCREEN_TYPE_LABEL_MAP.short_text;
-
-const QUESTION_ORIGIN = {
-  PRE_SCREEN: "pre-screen",
-  INTERVIEW: "interview",
-} as const;
-
-type QuestionOrigin = (typeof QUESTION_ORIGIN)[keyof typeof QUESTION_ORIGIN];
-
+// Identify whether a persisted question belongs to the pre-screening or interview buckets.
 const resolveQuestionOrigin = (question: any): QuestionOrigin => {
   const declaredOrigin = typeof question?.origin === "string" ? question.origin : "";
   if (
@@ -286,8 +143,6 @@ const isPreScreenQuestion = (question: any) =>
 const isInterviewQuestion = (question: any) =>
   resolveQuestionOrigin(question) === QUESTION_ORIGIN.INTERVIEW;
 
-type ReviewSectionKey = "career" | "cv" | "ai";
-
 const cloneQuestionGroups = (groups: QuestionGroup[]): QuestionGroup[] =>
   groups.map((group) => ({
     ...group,
@@ -301,92 +156,20 @@ const RichTextEditor = dynamic(
   { ssr: false }
 );
 
-const SCREENING_SETTING_OPTIONS = [
-  { name: "Good Fit and above", icon: "la la-check" },
-  { name: "Only Strong Fit", icon: "la la-check-double" },
-  { name: "No Automatic Promotion", icon: "la la-times" },
-];
-
-const WORK_SETUP_OPTIONS = [
-  { name: "Fully Remote" },
-  { name: "Onsite" },
-  { name: "Hybrid" },
-];
-
-const EMPLOYMENT_TYPE_OPTIONS = [
-  { name: "Full-Time" },
-  { name: "Part-Time" },
-  { name: "Contract" },
-  { name: "Internship" },
-];
-
-const CURRENCY_OPTIONS = [
-  "PHP",
-  "USD",
-  "EUR",
-  "GBP",
-  "AUD",
-  "SGD",
-  "JPY",
-] as const;
-
-type CurrencyCode = (typeof CURRENCY_OPTIONS)[number];
-
-const CURRENCY_SYMBOLS: Record<string, string> = {
-  PHP: "₱",
-  USD: "$",
-  EUR: "€",
-  GBP: "£",
-  AUD: "A$",
-  SGD: "S$",
-  JPY: "¥",
-};
-
-const INTERVIEW_QUESTION_COUNT = 5;
-const SEGMENTED_DRAFT_STORAGE_KEY = "jia-segmented-career-draft";
-
-const CURRENCY_DROPDOWN_IDS = {
-  minimum: "salary-currency-minimum-menu",
-  maximum: "salary-currency-maximum-menu",
-} as const;
-
-const MEMBER_ROLE_OPTIONS = [
-  { value: "job_owner", label: "Job Owner" },
-  { value: "collaborator", label: "Collaborator" },
-  { value: "viewer", label: "Viewer" },
-];
-
-const MEMBER_ROLE_LABEL_MAP: Record<string, string> = MEMBER_ROLE_OPTIONS.reduce(
-  (acc, option) => {
-    acc[option.value] = option.label;
-    return acc;
-  },
-  {} as Record<string, string>
-);
-
-const getMemberRoleLabel = (role?: string) =>
-  role && MEMBER_ROLE_LABEL_MAP[role] ? MEMBER_ROLE_LABEL_MAP[role] : role || "Member";
-
 interface SegmentedCareerFormProps {
   formType: "add" | "edit";
   career?: any;
   setShowEditModal?: (show: boolean) => void;
 }
 
-interface MemberRecord {
-  _id: string;
-  name?: string;
-  email: string;
-  image?: string;
-  role?: string;
-}
-
+// Basic HTML-to-plain-text check used to decide whether the description should be considered filled.
 const isDescriptionPresent = (value?: string) => {
   if (!value) return false;
   const plain = value.replace(/<[^>]+>/g, "").trim();
   return plain.length > 0;
 };
 
+// Formats persisted timestamps for the "Last saved" indicator. Falls back gracefully on invalid input.
 const formatTimestamp = (value?: string | number | Date) => {
   if (!value) return "Not saved yet";
   const date = new Date(value);
@@ -402,6 +185,11 @@ const formatTimestamp = (value?: string | number | Date) => {
   });
 };
 
+/**
+ * SegmentedCareerForm orchestrates the multi-step recruiter workflow for creating and editing
+ * careers. It stitches together local draft persistence, AI integrations, validation, and the
+ * publish flow while exposing a consistent wizard experience.
+ */
 export default function SegmentedCareerForm({
   career,
   formType,
@@ -477,17 +265,20 @@ export default function SegmentedCareerForm({
   const isGeneratingQuestions = pendingQuestionGeneration !== null;
   const isOnReviewStep = activeStep === "review";
 
+  // Clear the AI validation banner once the minimum question requirement has been satisfied.
   useEffect(() => {
     if (totalInterviewQuestionCount >= 5 && showAiQuestionValidation) {
       setShowAiQuestionValidation(false);
     }
   }, [totalInterviewQuestionCount, showAiQuestionValidation]);
 
+  // Remove the CV review warning as soon as the step becomes valid again.
   useEffect(() => {
     if (isStepComplete("cv-screening") && showCvScreeningValidation) {
       setShowCvScreeningValidation(false);
     }
   }, [draft.description, questions, showCvScreeningValidation]);
+  // Expand/collapse accordions within the review step. Persisted per session to respect user choice.
   const toggleReviewSection = (section: ReviewSectionKey) => {
     setExpandedReviewSections((current) => ({
       ...current,
@@ -495,6 +286,7 @@ export default function SegmentedCareerForm({
     }));
   };
 
+  // Convert counts into human-friendly labels for badges (e.g., "No questions" vs "3 questions").
   const formatCountLabel = (count: number, singular: string, plural?: string) => {
     const pluralLabel = plural ?? `${singular}s`;
     if (count === 0) {
@@ -506,6 +298,7 @@ export default function SegmentedCareerForm({
     return `${count} ${pluralLabel.toLowerCase()}`;
   };
 
+  // Translate screening automation configuration into descriptive copy for the review summary.
   const renderScreeningDescription = (setting?: string): ReactNode => {
     switch (setting) {
       case "Good Fit and above":
@@ -531,6 +324,7 @@ export default function SegmentedCareerForm({
   const jobDescriptionMarkup = isDescriptionPresent(draft.description)
     ? { __html: draft.description }
     : null;
+  // Normalization helpers keep duplicate detection and grouping deterministic.
   const normalizeQuestionText = (value: string) => value.trim().toLowerCase();
   const normalizeCategoryName = (value: string) =>
     value
@@ -538,6 +332,7 @@ export default function SegmentedCareerForm({
       .replace(/\s*\/\s*/g, " / ")
       .replace(/\s+/g, " ")
       .trim();
+  // Pull the display text out of a question object or string, accommodating legacy shapes.
   const extractQuestionText = (entry: unknown): string => {
     if (typeof entry === "string") {
       return entry.trim();
@@ -566,6 +361,8 @@ export default function SegmentedCareerForm({
 
     return "";
   };
+  // Keeps "questionCountToAsk" aligned with the count of interview questions to avoid impossible
+  // configurations when recruiters delete items.
   const ensureQuestionCountWithinBounds = (group: QuestionGroup) => {
     if (typeof group.questionCountToAsk !== "number") {
       return;
@@ -894,17 +691,6 @@ export default function SegmentedCareerForm({
 
     return hasChanges;
   };
-  const [provinceList, setProvinceList] = useState<Array<any>>([]);
-  const [cityList, setCityList] = useState<Array<any>>([]);
-  const [members, setMembers] = useState<MemberRecord[]>([]);
-  const [isLoadingMembers, setIsLoadingMembers] = useState(false);
-    // Track which member's role menu is open (for custom role dropdown UI)
-  const [openRoleMenuFor, setOpenRoleMenuFor] = useState<string | null>(null);
-  const [isMemberPickerOpen, setIsMemberPickerOpen] = useState(false);
-  const [memberSearch, setMemberSearch] = useState("");
-  const [openCurrencyDropdown, setOpenCurrencyDropdown] = useState<"minimum" | "maximum" | null>(null);
-  const minimumCurrencyDropdownRef = useRef<HTMLDivElement | null>(null);
-  const maximumCurrencyDropdownRef = useRef<HTMLDivElement | null>(null);
   const [openPreScreenTypeFor, setOpenPreScreenTypeFor] = useState<string | null>(null);
   const persistedDraftQuestionsRef = useRef<string | null>(null);
   const hasHydratedDraftRef = useRef(false);
@@ -912,44 +698,6 @@ export default function SegmentedCareerForm({
   const [draggingQuestionId, setDraggingQuestionId] = useState<string | null>(null);
   const [dragOverQuestionId, setDragOverQuestionId] = useState<string | null>(null);
   const [isDragOverTail, setIsDragOverTail] = useState(false);
-
-    // Close the role menu on outside click
-    useEffect(() => {
-      if (!openRoleMenuFor) return;
-      const handler = (e: MouseEvent) => {
-        const menu = document.getElementById(`role-menu-${openRoleMenuFor}`);
-        const btn = document.getElementById(`role-button-${openRoleMenuFor}`);
-        if (menu && btn) {
-          if (!menu.contains(e.target as Node) && !btn.contains(e.target as Node)) {
-            setOpenRoleMenuFor(null);
-          }
-        } else {
-          setOpenRoleMenuFor(null);
-        }
-      };
-      document.addEventListener("mousedown", handler);
-      return () => document.removeEventListener("mousedown", handler);
-    }, [openRoleMenuFor]);
-
-    // Close member picker on outside click
-    useEffect(() => {
-      if (!isMemberPickerOpen) return;
-      const handler = (e: MouseEvent) => {
-        const panel = document.getElementById("member-picker-panel");
-        const btn = document.getElementById("member-picker-button");
-        if (panel && btn) {
-          if (!panel.contains(e.target as Node) && !btn.contains(e.target as Node)) {
-            setIsMemberPickerOpen(false);
-            setMemberSearch("");
-          }
-        } else {
-          setIsMemberPickerOpen(false);
-          setMemberSearch("");
-        }
-      };
-      document.addEventListener("mousedown", handler);
-      return () => document.removeEventListener("mousedown", handler);
-    }, [isMemberPickerOpen]);
 
     // Close pre-screen response type menus on outside click or escape
     useEffect(() => {
@@ -986,41 +734,6 @@ export default function SegmentedCareerForm({
     }, [openPreScreenTypeFor]);
 
   useEffect(() => {
-    if (!openCurrencyDropdown) {
-      return;
-    }
-
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-      const minimumRef = minimumCurrencyDropdownRef.current;
-      const maximumRef = maximumCurrencyDropdownRef.current;
-
-      const clickedInsideMinimum = minimumRef?.contains(target);
-      const clickedInsideMaximum = maximumRef?.contains(target);
-
-      if (clickedInsideMinimum || clickedInsideMaximum) {
-        return;
-      }
-
-      setOpenCurrencyDropdown(null);
-    };
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpenCurrencyDropdown(null);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [openCurrencyDropdown]);
-
-  useEffect(() => {
     const fetchQuestionInstruction = async () => {
       try {
         const response = await axios.post("/api/fetch-global-settings", {
@@ -1037,24 +750,6 @@ export default function SegmentedCareerForm({
     fetchQuestionInstruction();
   }, []);
 
-    // Rich descriptions for the role picker menu UI
-    const ROLE_DESCRIPTIONS: Record<string, string> = {
-      "Job Owner":
-        "Leads the hiring process for assigned jobs. Has access with all career settings.",
-      Collaborator:
-        "Helps evaluate candidates and assist with hiring tasks. Can move candidates through the pipeline, but cannot change any career settings.",
-      Viewer:
-        "Reviews candidates and provides feedback. Can only view candidate profiles and comment.",
-      // Also support alternate labels seen in design references
-      Contributor:
-        "Helps evaluate candidates and assist with hiring tasks. Can move candidates through the pipeline, but cannot change any career settings.",
-      Reviewer:
-        "Reviews candidates and provides feedback. Can only view candidate profiles and comment.",
-    };
-  const [selectedMemberId, setSelectedMemberId] = useState<string>("");
-  const [selectedMemberRole, setSelectedMemberRole] = useState<string>(
-    MEMBER_ROLE_OPTIONS[0].value
-  );
   const [showSaveModal, setShowSaveModal] = useState<string>("");
   const [isSavingCareer, setIsSavingCareer] = useState(false);
   const savingCareerRef = useRef(false);
@@ -1106,12 +801,12 @@ export default function SegmentedCareerForm({
       {
         heading: "Use clear, standard job titles",
         body:
-          "for better searchability (e.g., “Software Engineer” instead of “Code Ninja” or “Tech Rockstar”).",
+          'for better searchability (e.g., "Software Engineer" instead of "Code Ninja" or "Tech Rockstar").',
       },
       {
         heading: "Avoid abbreviations",
         body:
-          "or internal role codes that applicants may not understand (e.g., use “QA Engineer” instead of “QE II” or “QA-TL”).",
+          'or internal role codes that applicants may not understand (e.g., use "QA Engineer" instead of "QE II" or "QA-TL").',
       },
       {
         heading: "Keep it concise",
@@ -1126,34 +821,6 @@ export default function SegmentedCareerForm({
     () => draft.team?.members || [],
     [draft.team?.members]
   );
-  const hasJobOwner = useMemo(
-    () => teamMembers.some((member: any) => member.role === 'job_owner'),
-    [teamMembers]
-  );
-  const availableMembers = useMemo(() => {
-    const query = memberSearch.trim().toLowerCase();
-    const taken = new Set(
-      teamMembers.map((member: any) => member.memberId)
-    );
-
-    return members.filter((member) => {
-      if (!member?._id) {
-        return false;
-      }
-      if (taken.has(member._id)) {
-        return false;
-      }
-
-      if (!query) {
-        return true;
-      }
-
-      const name = (member.name || "").toLowerCase();
-      const email = (member.email || "").toLowerCase();
-      return name.includes(query) || email.includes(query);
-    });
-  }, [members, teamMembers, memberSearch]);
-
   const selectedCurrency = useMemo(() => {
     const currency = draft.salary?.currency;
     if (currency && currency.trim().length > 0) {
@@ -1167,20 +834,6 @@ export default function SegmentedCareerForm({
   }, [selectedCurrency]);
 
   const currencyPrefixLabel = currencySymbol || selectedCurrency;
-
-  const handleSelectCurrency = (currency: string) => {
-    updateDraft({
-      salary: {
-        ...draft.salary,
-        currency: currency.toUpperCase(),
-      },
-    });
-    setOpenCurrencyDropdown(null);
-  };
-
-  const toggleCurrencyDropdown = (anchor: "minimum" | "maximum") => {
-    setOpenCurrencyDropdown((current) => (current === anchor ? null : anchor));
-  };
 
   const formatSalaryValue = (value: string) => {
     if (!value) {
@@ -1205,56 +858,6 @@ export default function SegmentedCareerForm({
   const maximumSalaryDisplay = draft.salary.isNegotiable
     ? "Negotiable"
     : formatSalaryValue(draft.salary.maximum);
-
-  const renderCurrencyControl = (
-    anchor: "minimum" | "maximum",
-    ref: MutableRefObject<HTMLDivElement | null>
-  ) => (
-    <div
-      className={styles.currencySuffixDropdown}
-      ref={ref}
-      data-testid={`salary-${anchor}-currency-control`}
-    >
-      <button
-        type="button"
-        className={styles.currencyButton}
-        onClick={() => toggleCurrencyDropdown(anchor)}
-        aria-label={anchor === "minimum" ? "Select minimum salary currency" : "Select maximum salary currency"}
-        aria-haspopup="listbox"
-        aria-expanded={openCurrencyDropdown === anchor}
-        aria-controls={CURRENCY_DROPDOWN_IDS[anchor]}
-      >
-        <span>{selectedCurrency}</span>
-        <i className="la la-angle-down" aria-hidden="true"></i>
-      </button>
-      {openCurrencyDropdown === anchor && (
-        <div
-          className={styles.currencyMenu}
-          role="listbox"
-          id={CURRENCY_DROPDOWN_IDS[anchor]}
-          aria-label="Select salary currency"
-        >
-          {CURRENCY_OPTIONS.map((option) => (
-            <button
-              key={option}
-              type="button"
-              role="option"
-              aria-selected={option === selectedCurrency}
-              className={classNames(styles.currencyMenuItem, {
-                [styles.currencyMenuItemActive]: option === selectedCurrency,
-              })}
-              onClick={() => handleSelectCurrency(option)}
-            >
-              <span>{option}</span>
-              {option === selectedCurrency && (
-                <i className="la la-check" aria-hidden="true"></i>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
 
   const hydrationRef = useRef(false);
 
@@ -1290,10 +893,6 @@ export default function SegmentedCareerForm({
       console.warn("[SegmentedCareerForm] Unable to read persisted draft questions", error);
       hasHydratedDraftRef.current = true;
     }
-  }, []);
-
-  useEffect(() => {
-    setProvinceList((locations as any).provinces || []);
   }, []);
 
   useEffect(() => {
@@ -1367,175 +966,8 @@ export default function SegmentedCareerForm({
     }
   }, [questions, updateDraft]);
 
-  useEffect(() => {
-    if (!provinceList.length || !hydrationRef.current) {
-      return;
-    }
 
-    const selectedProvince = draft.location.province
-      ? provinceList.find((item) => item.name === draft.location.province)
-      : undefined;
 
-    const derivedCities = selectedProvince
-      ? (locations as any).cities.filter(
-          (item: any) => item.province === selectedProvince.key
-        )
-      : [];
-
-    setCityList(derivedCities);
-
-    if (!draft.location.province) {
-      if (draft.location.city) {
-        updateDraft({
-          location: {
-            ...draft.location,
-            city: "",
-          },
-        });
-      }
-      return;
-    }
-
-    if (!selectedProvince) {
-      updateDraft({
-        location: {
-          ...draft.location,
-          province: "",
-          city: "",
-        },
-      });
-      return;
-    }
-
-    if (
-      draft.location.city &&
-      !derivedCities.some((item: any) => item.name === draft.location.city)
-    ) {
-      updateDraft({
-        location: {
-          ...draft.location,
-          city: "",
-        },
-      });
-    }
-  }, [provinceList, draft.location, updateDraft]);
-
-  useEffect(() => {
-    if (!orgID) {
-      return;
-    }
-
-    const fetchMembers = async () => {
-      try {
-        setIsLoadingMembers(true);
-        const response = await axios.post("/api/fetch-members", { orgID });
-        setMembers(response.data || []);
-      } catch (error) {
-        console.error("Failed to fetch members", error);
-        errorToast("Unable to load members", 1600);
-      } finally {
-        setIsLoadingMembers(false);
-      }
-    };
-
-    fetchMembers();
-  }, [orgID]);
-
-  useEffect(() => {
-    if (career) {
-      return;
-    }
-
-    if (!user?.email || !members.length) {
-      return;
-    }
-
-    const matchingMember = members.find(
-      (entry) => entry.email?.toLowerCase() === user.email.toLowerCase()
-    );
-
-    if (!matchingMember) {
-      return;
-    }
-
-    const alreadyInTeam = teamMembers.some(
-      (member: any) => member.memberId === matchingMember._id
-    );
-
-    if (!alreadyInTeam) {
-      updateDraft({
-        team: {
-          members: [
-            ...teamMembers,
-            {
-              memberId: matchingMember._id,
-              name: matchingMember.name || matchingMember.email,
-              email: matchingMember.email,
-              image: matchingMember.image,
-              role: "job_owner",
-            },
-          ],
-        },
-      });
-    }
-  }, [career, members, teamMembers, updateDraft, user?.email]);
-
-  const addMember = (memberId?: string): boolean => {
-    const targetMemberId = memberId || selectedMemberId;
-    if (!targetMemberId) {
-      return false;
-    }
-
-    const existing = teamMembers.find(
-      (member: any) => member.memberId === targetMemberId
-    );
-    if (existing) {
-      errorToast("Member already added", 1400);
-      return false;
-    }
-
-    const memberDetails = members.find((item) => item._id === targetMemberId);
-    if (!memberDetails) {
-      return false;
-    }
-
-    updateDraft({
-      team: {
-        members: [
-          ...teamMembers,
-          {
-            memberId: memberDetails._id,
-            name: memberDetails.name || memberDetails.email,
-            email: memberDetails.email,
-            image: memberDetails.image,
-            role: selectedMemberRole,
-          },
-        ],
-      },
-    });
-
-    setSelectedMemberId("");
-    setSelectedMemberRole(MEMBER_ROLE_OPTIONS[0].value);
-    return true;
-  };
-
-  const removeMember = (memberId: string) => {
-    updateDraft({
-      team: {
-        members: teamMembers.filter((member: any) => member.memberId !== memberId),
-      },
-    });
-  };
-
-  const updateMemberRole = (memberId: string, role: string) => {
-    updateDraft({
-      team: {
-        members: teamMembers.map((member: any) =>
-          member.memberId === memberId ? { ...member, role } : member
-        ),
-      },
-    });
-  };
 
   const handleAddPreScreenQuestion = (
     questionText: string,
@@ -2277,6 +1709,8 @@ export default function SegmentedCareerForm({
     closeQuestionModal();
   };
 
+  // Validate prerequisite job details before constructing an AI prompt. Returns trimmed values
+  // so the downstream generators do not need to duplicate null/empty checks.
   const ensureJobDetailsForGeneration = () => {
     const jobTitle = draft.jobTitle.trim();
     const plainDescription = (draft.description || "").replace(/<[^>]+>/g, " ").trim();
@@ -2289,6 +1723,8 @@ export default function SegmentedCareerForm({
     return { jobTitle, plainDescription };
   };
 
+  // Build a numbered list of existing interview questions so the LLM can avoid duplicates when
+  // generating new content. Only includes items recognized as interview questions.
   const buildExistingQuestionList = () =>
     questions
       .map((group) => {
@@ -2309,6 +1745,8 @@ export default function SegmentedCareerForm({
       .filter(Boolean)
       .join("\n");
 
+  // Generate a full set of interview questions across every category. Invokes the shared LLM
+  // endpoint, parses the JSON payload, and merges any new questions into the existing state.
   const handleGenerateAllInterviewQuestions = async () => {
     if (pendingQuestionGeneration) {
       return;
@@ -2408,6 +1846,8 @@ export default function SegmentedCareerForm({
     }
   };
 
+  // Generate interview questions for a specific category using the LLM helper, then merge the
+  // sanitized results into the local question state. Guards against concurrent generation.
   const handleGenerateQuestionsForCategory = async (categoryName: string) => {
     if (pendingQuestionGeneration) {
       return;
@@ -2510,6 +1950,8 @@ export default function SegmentedCareerForm({
     }
   };
 
+  // Determine whether a step has met its minimum completion criteria so we can allow forward
+  // navigation or publishing. Only career details and AI setup enforce hard requirements.
   const isStepComplete = (step: SegmentedCareerStep) => {
     switch (step) {
       case "career-details":
@@ -2537,6 +1979,7 @@ export default function SegmentedCareerForm({
     }
   };
 
+  // Memoized aggregate validity flag used to enable the final review CTA. Keeps render cost low.
   const isFormValid = useMemo(
     () =>
       isStepComplete("career-details") &&
@@ -2545,11 +1988,13 @@ export default function SegmentedCareerForm({
     [questions, draft, teamMembers, totalInterviewQuestionCount]
   );
 
+  // Index of the active step within the segmented wizard configuration.
   const currentStepIndex = useMemo(
     () => segmentedSteps.findIndex((step) => step.id === activeStep),
     [activeStep]
   );
 
+  // Calculate progress (0-1) for the stepper indicator. Adds a half-step buffer while in-progress.
   const progressRatio = useMemo(() => {
     const totalSteps = segmentedSteps.length;
     if (totalSteps === 0 || currentStepIndex < 0) {
@@ -2583,6 +2028,8 @@ export default function SegmentedCareerForm({
     }
   }, [draft.requireVideo, draft.cvSecretPrompt, draft.aiInterviewSecretPrompt, updateDraft]);
 
+  // Persist the current draft and move forward when the active step is complete. Surfaces
+  // validation errors inline instead of silently skipping required data.
   const goToNextStep = () => {
     if (currentStepIndex === -1 || currentStepIndex === segmentedSteps.length - 1) {
       return;
@@ -2611,6 +2058,7 @@ export default function SegmentedCareerForm({
     persistDraft({}, { orgID, userEmail: user?.email });
   };
 
+  // Navigate backwards within the wizard without mutating persisted draft state.
   const goToPreviousStep = () => {
     if (currentStepIndex <= 0) {
       return;
@@ -2619,6 +2067,7 @@ export default function SegmentedCareerForm({
     setActiveStep(prevStep.id);
   };
 
+  // Prevent users from jumping ahead unless every prior step satisfies its completion rules.
   const canNavigateToStep = (targetStep: SegmentedCareerStep, index: number) => {
     if (index <= currentStepIndex) {
       return true;
@@ -2628,6 +2077,8 @@ export default function SegmentedCareerForm({
     return requiredSteps.every((step) => isStepComplete(step.id));
   };
 
+  // Build the payload expected by the add/update career APIs. Converts user-friendly primitives
+  // into normalized backend fields (salary numbers, team structure, etc.) and preserves audit info.
   const formatCareerPayload = (status: string) => {
     const minimumSalary = draft.salary.minimum
       ? Number(draft.salary.minimum)
@@ -2674,6 +2125,8 @@ export default function SegmentedCareerForm({
     };
   };
 
+  // Entry point for "Save & Continue" and "Publish". Performs lightweight validation, enforces
+  // sequential navigation, and only opens the confirmation modal when the form is actually ready.
   const confirmSaveCareer = (status: string) => {
     if (!status) {
       return;
@@ -2716,6 +2169,8 @@ export default function SegmentedCareerForm({
     setShowSaveModal(status);
   };
 
+  // Persist the career to the server, handling both create and update flows. Applies final
+  // validation, writes draft metadata, and provides user feedback/toasts for success or failure.
   const saveCareer = async (status: string) => {
     if (!status || savingCareerRef.current) {
       return;
@@ -2799,6 +2254,8 @@ export default function SegmentedCareerForm({
     }
   };
 
+  // Human-friendly timestamp displayed in the header. Prefers draft context metadata and falls
+  // back to the persisted career record if no draft state exists.
   const lastSavedTimestamp = useMemo(() => {
     if (draft.context?.lastPersistedAt) {
       return formatTimestamp(draft.context.lastPersistedAt);
@@ -2811,6 +2268,8 @@ export default function SegmentedCareerForm({
     return "Not saved yet";
   }, [draft.context?.lastPersistedAt, career?.updatedAt]);
 
+  // Render the read-only summary for the "Career Details & Team" accordion within the review step.
+  // Ensures missing data is communicated clearly to recruiters ahead of publish.
   const renderCareerReviewSection = () => {
     return (
       <div className={classNames(styles.reviewAccordionBody, styles.reviewCareerBody)}>
@@ -2909,6 +2368,8 @@ export default function SegmentedCareerForm({
     );
   };
 
+  // Render the CV Review accordion summary, including secret prompts and pre-screening questions.
+  // Uses sanitized text and defensive checks so the review UI never breaks due to malformed data.
   const renderCvReviewSection = () => {
     const totalPreScreenQuestions = preScreeningQuestions.length;
     const secretPromptLines =
@@ -3009,6 +2470,8 @@ export default function SegmentedCareerForm({
     );
   };
 
+  // Render the AI setup summary including secret prompts, toggles, and the generated/manual
+  // interview questions grouped by category. Uses a running index to maintain ordered lists.
   const renderAiReviewSection = () => {
     const populatedInterviewGroups = interviewQuestionGroups.filter(
       (group) => group.interviewQuestions.length > 0
@@ -3130,6 +2593,8 @@ export default function SegmentedCareerForm({
     ai: "ai-setup",
   };
 
+  // When a recruiter clicks "Edit" inside the review accordion, jump back to the corresponding
+  // wizard step and reset any stale validation banners for that section.
   const handleReviewSectionEdit = (
     sectionKey: ReviewSectionKey,
     event: ReactMouseEvent<HTMLButtonElement>
@@ -3291,1793 +2756,101 @@ export default function SegmentedCareerForm({
       <div className={styles.stepContent}>
         <div className={styles.primaryColumn}>
           {activeStep === "career-details" && (
-            <>
-              <div className={styles.card}>
-                <header className={styles.cardHeader}>
-                  <span className={styles.icon}>
-                    <i className="la la-suitcase"></i>
-                  </span>
-                  <div className={styles.titleGroup}>
-                    <strong>Career information</strong>
-                  </div>
-                </header>
-                <div className={styles.cardInner}>
-                  {/* Basic Information */}
-                  <div style={{ fontSize: '14px', fontWeight: 600, color: '#1f2937', marginBottom: '12px' }}>Basic Information</div>
-                  <div
-                    className={classNames(styles.inlineField, {
-                      [styles.errorField]: !draft.jobTitle && showCareerDetailsErrors,
-                    })}
-                  >
-                    <label htmlFor="jobTitle">Job Title</label>
-                    <input
-                      id="jobTitle"
-                      placeholder="Enter job title"
-                      value={draft.jobTitle}
-                      onChange={(event) => updateDraft({ jobTitle: event.target.value })}
-                      className={classNames({
-                        [styles.errorInput]: !draft.jobTitle && showCareerDetailsErrors,
-                      })}
-                    />
-                    {!draft.jobTitle && showCareerDetailsErrors && (
-                      <div style={{ color: '#dc2626', fontSize: '12px', marginTop: '6px' }}>This is a required field.</div>
-                    )}
-                  </div>
-                  
-                  <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #e5e7eb' }}>
-                    {/* Work Setting */}
-                    <div style={{ fontSize: '12px', fontWeight: 500, color: '#6b7280', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Work Setting</div>
-                    <div className={styles.fieldGrid}>
-                      <div
-                        className={classNames(styles.inlineField, {
-                          [styles.errorField]: !draft.employmentType && showCareerDetailsErrors,
-                        })}
-                      >
-                        <label>Employment Type</label>
-                        <CustomDropdown
-                          screeningSetting={draft.employmentType}
-                          settingList={EMPLOYMENT_TYPE_OPTIONS}
-                          placeholder="Choose employment type"
-                          onSelectSetting={(value: string) => updateDraft({ employmentType: value })}
-                        />
-                        {!draft.employmentType && showCareerDetailsErrors && (
-                          <div style={{ color: '#dc2626', fontSize: '12px', marginTop: '6px' }}>This is a required field.</div>
-                        )}
-                      </div>
-                      <div
-                        className={classNames(styles.inlineField, {
-                          [styles.errorField]: !draft.workSetup && showCareerDetailsErrors,
-                        })}
-                      >
-                        <label>Arrangement</label>
-                        <CustomDropdown
-                          screeningSetting={draft.workSetup}
-                          settingList={WORK_SETUP_OPTIONS}
-                          placeholder="Choose work arrangement"
-                          onSelectSetting={(value: string) => updateDraft({ workSetup: value })}
-                        />
-                        {!draft.workSetup && showCareerDetailsErrors && (
-                          <div style={{ color: '#dc2626', fontSize: '12px', marginTop: '6px' }}>This is a required field.</div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #e5e7eb' }}>
-                    <div style={{ fontSize: '12px', fontWeight: 500, color: '#6b7280', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Location</div>
-                    <div className={styles.fieldGrid}>
-                      <div className={styles.inlineField}>
-                        <label>Country</label>
-                        <CustomDropdown
-                          screeningSetting={draft.location.country}
-                          placeholder="Select country"
-                          settingList={[{ name: "Philippines" }]}
-                          onSelectSetting={(value: string) =>
-                            updateDraft({
-                              location: {
-                                ...draft.location,
-                                country: value,
-                              },
-                            })
-                          }
-                        />
-                      </div>
-                      <div
-                        className={classNames(styles.inlineField, {
-                          [styles.errorField]: !draft.location.province && showCareerDetailsErrors,
-                        })}
-                      >
-                        <label>State / Province</label>
-                        <CustomDropdown
-                          screeningSetting={draft.location.province}
-                          placeholder="Choose state / province"
-                          settingList={provinceList}
-                          onSelectSetting={(value: string) => {
-                            const provinceData = provinceList.find((item) => item.name === value);
-                            const derivedCities = (locations as any).cities.filter(
-                              (city: any) => city.province === provinceData?.key
-                            );
-                            setCityList(derivedCities);
-                            updateDraft({
-                              location: {
-                                ...draft.location,
-                                province: value,
-                                city: "",
-                              },
-                            });
-                          }}
-                        />
-                        {!draft.location.province && showCareerDetailsErrors && (
-                          <div style={{ color: '#dc2626', fontSize: '12px', marginTop: '6px' }}>This is a required field.</div>
-                        )}
-                      </div>
-                      <div
-                        className={classNames(styles.inlineField, {
-                          [styles.errorField]: !draft.location.city && showCareerDetailsErrors,
-                        })}
-                      >
-                        <label>City</label>
-                        <CustomDropdown
-                          screeningSetting={draft.location.city}
-                          placeholder="Choose city"
-                          settingList={cityList}
-                          onSelectSetting={(value: string) =>
-                            updateDraft({
-                              location: {
-                                ...draft.location,
-                                city: value,
-                              },
-                            })
-                          }
-                        />
-                        {!draft.location.city && showCareerDetailsErrors && (
-                          <div style={{ color: '#dc2626', fontSize: '12px', marginTop: '6px' }}>This is a required field.</div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #e5e7eb' }}>
-                    {/* Salary with negotiable toggle on the right */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                      <div style={{ fontSize: '12px', fontWeight: 500, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Salary</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '14px', color: '#6b7280' }}>Negotiable</span>
-                        <label className="switch" style={{ margin: 0 }}>
-                          <input
-                            type="checkbox"
-                            checked={draft.salary.isNegotiable}
-                            onChange={() =>
-                              updateDraft({
-                                salary: {
-                                  ...draft.salary,
-                                  isNegotiable: !draft.salary.isNegotiable,
-                                },
-                              })
-                            }
-                          />
-                          <span className="slider round"></span>
-                        </label>
-                      </div>
-                    </div>
-                    <div className={styles.salaryGroup}>
-                      <div
-                        className={classNames(styles.inlineField, styles.salaryInput, {
-                          [styles.errorField]: !draft.salary.minimum && showCareerDetailsErrors,
-                        })}
-                      >
-                         <label>Minimum Salary</label>
-                         <div className={styles.salaryInputControl}>
-                           {currencyPrefixLabel && (
-                             <span className={styles.currencyPrefix} aria-hidden="true">{currencyPrefixLabel}</span>
-                           )}
-                           <input
-                             type="number"
-                             min={0}
-                             placeholder="0"
-                             value={draft.salary.minimum}
-                             onChange={(event) =>
-                               updateDraft({
-                                 salary: {
-                                   ...draft.salary,
-                                   minimum: event.target.value,
-                                 },
-                               })
-                             }
-                            className={classNames({
-                              [styles.errorInput]: !draft.salary.minimum && showCareerDetailsErrors,
-                            })}
-                           />
-                           {renderCurrencyControl("minimum", minimumCurrencyDropdownRef)}
-                         </div>
-                         {!draft.salary.minimum && showCareerDetailsErrors && (
-                           <div style={{ color: '#dc2626', fontSize: '12px', marginTop: '6px' }}>This is a required field.</div>
-                         )}
-                       </div>
-                      <div
-                        className={classNames(styles.inlineField, styles.salaryInput, {
-                          [styles.errorField]: !draft.salary.maximum && showCareerDetailsErrors,
-                        })}
-                      >
-                         <label>Maximum Salary</label>
-                         <div className={styles.salaryInputControl}>
-                           {currencyPrefixLabel && (
-                             <span className={styles.currencyPrefix} aria-hidden="true">{currencyPrefixLabel}</span>
-                           )}
-                           <input
-                             type="number"
-                             min={0}
-                             placeholder="0"
-                             value={draft.salary.maximum}
-                             onChange={(event) =>
-                               updateDraft({
-                                 salary: {
-                                   ...draft.salary,
-                                   maximum: event.target.value,
-                                 },
-                               })
-                             }
-                            className={classNames({
-                              [styles.errorInput]: !draft.salary.maximum && showCareerDetailsErrors,
-                            })}
-                           />
-                           {renderCurrencyControl("maximum", maximumCurrencyDropdownRef)}
-                         </div>
-                         {!draft.salary.maximum && showCareerDetailsErrors && (
-                           <div style={{ color: '#dc2626', fontSize: '12px', marginTop: '6px' }}>This is a required field.</div>
-                         )}
-                       </div>
-                    </div>
-                    {draft.salary.minimum &&
-                      draft.salary.maximum &&
-                      Number(draft.salary.minimum) > Number(draft.salary.maximum) && (
-                        <div style={{ color: '#dc2626', fontSize: '12px', marginTop: '6px' }}>
-                          Minimum salary cannot be higher than maximum salary.
-                        </div>
-                      )}
-                  </div>
-                </div>
-              </div>
-
-              <div className={styles.card}>
-                <header className={styles.cardHeader}>
-                  <span className={styles.icon}>
-                    <i className="la la-file-text"></i>
-                  </span>
-                  <div className={styles.titleGroup}>
-                    <strong>Job description</strong>
-                  </div>
-                </header>
-                <div className={styles.cardInner}>
-                  <div
-                    className={classNames(styles.sectionContainer, {
-                      [styles.errorField]: !isDescriptionPresent(draft.description) && showCareerDetailsErrors,
-                    })}
-                  >
-                    <div className={styles.sectionHeading}>2. Job Description</div>
-                    <RichTextEditor
-                      text={draft.description}
-                      setText={(value: string) => updateDraft({ description: value })}
-                    />
-                    {!isDescriptionPresent(draft.description) && showCareerDetailsErrors && (
-                      <div style={{ color: '#dc2626', fontSize: '12px', marginTop: '6px' }}>Job description is required.</div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className={styles.card}>
-                <header className={styles.cardHeader}>
-                  <span className={styles.icon}>
-                    <i className="la la-users"></i>
-                  </span>
-                  <div className={styles.titleGroup}>
-                    <strong>Team access</strong>
-                  </div>
-                </header>
-                <div className={styles.cardInner}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
-                    <div>
-                      <h4 style={{ margin: '0 0 4px 0', fontSize: '16px', fontWeight: 600, color: '#1f2937' }}>Add more members</h4>
-                      <p style={{ margin: '0', fontSize: '14px', color: '#6b7280' }}>
-                        You can add other members to collaborate on this career.
-                      </p>
-                    </div>
-                    <div style={{ position: 'relative', minWidth: '320px' }}>
-                      <button
-                        id="member-picker-button"
-                        type="button"
-                        onClick={() => setIsMemberPickerOpen((v) => !v)}
-                        style={{
-                          width: '100%',
-                          padding: '10px 12px',
-                          border: '1px solid #e5e7eb',
-                          borderRadius: '8px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          backgroundColor: '#fff',
-                          cursor: 'pointer',
-                          fontSize: '14px',
-                          color: '#111827',
-                        }}
-                      >
-                        <span>Add member</span>
-                        <i className="la la-angle-down" style={{ color: '#6b7280' }}></i>
-                      </button>
-
-                      {isMemberPickerOpen && (
-                        <div
-                          id="member-picker-panel"
-                          style={{
-                            position: 'absolute',
-                            top: 'calc(100% + 8px)',
-                            right: 0,
-                            width: 420,
-                            maxHeight: 380,
-                            display: 'flex',
-                            flexDirection: 'column',
-                            backgroundColor: '#fff',
-                            border: '1px solid #e5e7eb',
-                            borderRadius: 12,
-                            boxShadow: '0 10px 25px rgba(0,0,0,0.08)',
-                            zIndex: 60,
-                          }}
-                        >
-                          <div style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 }}>
-                            <div style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 8,
-                              border: '1px solid #e5e7eb',
-                              borderRadius: 10,
-                              padding: '8px 10px',
-                              backgroundColor: '#fff'
-                            }}>
-                              <i className="la la-search" style={{ color: '#9ca3af' }}></i>
-                              <input
-                                value={memberSearch}
-                                onChange={(e) => setMemberSearch(e.target.value)}
-                                placeholder="Search member"
-                                style={{
-                                  border: 'none',
-                                  outline: 'none',
-                                  flex: 1,
-                                  fontSize: 14,
-                                }}
-                              />
-                            </div>
-                          </div>
-
-                          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
-                            {availableMembers.length === 0 ? (
-                              <div style={{
-                                padding: '16px 8px',
-                                fontSize: 14,
-                                color: '#6b7280',
-                                textAlign: 'center',
-                              }}>
-                                {memberSearch.trim()
-                                  ? 'No members match your search.'
-                                  : 'All available members are already added.'}
-                              </div>
-                            ) : (
-                              availableMembers.map((m) => (
-                                <button
-                                  key={m._id}
-                                  type="button"
-                                  onClick={() => {
-                                    const didAdd = addMember(m._id);
-                                    if (didAdd) {
-                                      setIsMemberPickerOpen(false);
-                                      setMemberSearch('');
-                                    }
-                                  }}
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    width: '100%',
-                                    textAlign: 'left',
-                                    gap: 12,
-                                    padding: '10px 6px',
-                                    background: 'transparent',
-                                    border: 'none',
-                                    cursor: 'pointer',
-                                  }}
-                                >
-                                  {m.image ? (
-                                    <img src={m.image} alt={m.name || m.email} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-                                  ) : (
-                                    <span style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', backgroundColor: '#e5e7eb', fontSize: 12, fontWeight: 600, color: '#6b7280', flexShrink: 0 }}>
-                                      {(m.name || m.email || '?').charAt(0)}
-                                    </span>
-                                  )}
-                                  <div style={{ minWidth: 0 }}>
-                                    <div style={{ fontSize: 15, color: '#111827', fontWeight: 600, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name || 'Member'}</div>
-                                    <div style={{ fontSize: 14, color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.email}</div>
-                                  </div>
-                                </button>
-                              ))
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>
-                    {/* Validation: Job owner required, show above member list */}
-                    {!hasJobOwner && teamMembers.length > 0 && (
-                      <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        marginBottom: '16px',
-                        color: '#dc2626',
-                      }}>
-                        <i className="la la-exclamation-triangle" style={{ color: '#dc2626', fontSize: '18px', flexShrink: 0 }}></i>
-                        <span style={{ fontSize: '12px', fontWeight: 500 }}>Career must have a job owner. Please assign a job owner.</span>
-                      </div>
-                    )}
-                    {isLoadingMembers && (
-                      <span className={styles.inlineLink}>
-                        <i className="la la-spinner la-spin"></i>
-                        Loading members...
-                      </span>
-                    )}
-                    {!isLoadingMembers && teamMembers.length === 0 && (
-                      <span className={styles.inlineLink}>
-                        <i className="la la-info-circle"></i>
-                        Add at least one member to continue.
-                      </span>
-                    )}
-                    {teamMembers.map((member: any) => (
-                      <div key={member.memberId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid #e5e7eb', gap: '12px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
-                          {member.image ? (
-                            <img
-                              src={member.image}
-                              alt={member.name}
-                              style={{ width: 48, height: 48, objectFit: "cover", borderRadius: '50%', flexShrink: 0 }}
-                            />
-                          ) : (
-                            <span style={{ width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', backgroundColor: '#e5e7eb', fontSize: '14px', fontWeight: 600, color: '#6b7280', flexShrink: 0 }}>
-                              {(member.name || member.email || "?").charAt(0)}
-                            </span>
-                          )}
-                          <div style={{ minWidth: 0 }}>
-                            <strong style={{ display: 'block', fontSize: '14px', color: '#1f2937' }}>
-                              {member.name || "Member"} {member.email === user?.email && <span style={{ color: '#6b7280', fontWeight: 'normal' }}>(You)</span>}
-                            </strong>
-                            <span title={member.email} style={{ fontSize: '12px', color: '#6b7280', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {member.email}
-                            </span>
-                          </div>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
-                          <div style={{ position: 'relative' }}>
-                            {(() => {
-                              const currentRoleLabel =
-                                (MEMBER_ROLE_OPTIONS || []).find((o: any) => o.value === member.role)?.label ||
-                                'Select role';
-                              return (
-                                <button
-                                  id={`role-button-${member.memberId}`}
-                                  type="button"
-                                  onClick={() =>
-                                    setOpenRoleMenuFor((prev) =>
-                                      prev === member.memberId ? null : member.memberId
-                                    )
-                                  }
-                                  style={{
-                                    padding: '8px 12px',
-                                    border: '2px solid #e5e7eb',
-                                    borderRadius: '6px',
-                                    fontSize: '14px',
-                                    backgroundColor: '#fff',
-                                    minWidth: '200px',
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    gap: '12px',
-                                  }}
-                                >
-                                  <span style={{ color: '#111827', fontWeight: 500 }}>{currentRoleLabel}</span>
-                                  <i className="la la-angle-down" style={{ color: '#6b7280' }}></i>
-                                </button>
-                              );
-                            })()}
-                            {openRoleMenuFor === member.memberId && (
-                              <div
-                                id={`role-menu-${member.memberId}`}
-                                style={{
-                                  position: 'absolute',
-                                  top: 'calc(100% + 8px)',
-                                  right: 0,
-                                  width: 360,
-                                  backgroundColor: '#fff',
-                                  border: '1px solid #e5e7eb',
-                                  borderRadius: 12,
-                                  boxShadow: '0 10px 25px rgba(0,0,0,0.08)',
-                                  padding: 8,
-                                  zIndex: 50,
-                                }}
-                              >
-                                {(MEMBER_ROLE_OPTIONS || []).map((option: any) => {
-                                  const isSelected = member.role === option.value;
-                                  const label: string = option.label;
-                                  const desc = ROLE_DESCRIPTIONS[label] || '';
-                                  return (
-                                    <button
-                                      key={option.value}
-                                      type="button"
-                                      onClick={() => {
-                                        updateMemberRole(member.memberId, option.value);
-                                        setOpenRoleMenuFor(null);
-                                      }}
-                                      style={{
-                                        display: 'flex',
-                                        alignItems: 'flex-start',
-                                        gap: 12,
-                                        width: '100%',
-                                        textAlign: 'left',
-                                        padding: '12px 14px',
-                                        borderRadius: 10,
-                                        border: 'none',
-                                        backgroundColor: isSelected ? '#eaf1ff' : 'transparent',
-                                        cursor: 'pointer',
-                                      }}
-                                    >
-                                      <div style={{ flex: 1 }}>
-                                        <div style={{ fontSize: 14, fontWeight: 700, color: '#111827', marginBottom: 4 }}>
-                                          {label}
-                                        </div>
-                                        {desc && (
-                                          <div style={{ fontSize: 13, lineHeight: '18px', color: '#6b7280' }}>{desc}</div>
+            <CareerDetailsTeamAccessStep
+              draft={draft}
+              updateDraft={updateDraft}
+              teamMembers={teamMembers}
+              showErrors={showCareerDetailsErrors}
+              user={user}
+              orgID={orgID}
+              career={career}
+              selectedCurrency={selectedCurrency}
+              currencySymbol={currencySymbol}
+              RichTextEditorComponent={RichTextEditor}
+            />
                                         )}
-                                      </div>
-                                      {isSelected && (
-                                        <i className="la la-check" style={{ color: '#3b82f6', fontSize: 18 }}></i>
-                                      )}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-                          <button
-                            type="button"
-                            className={styles.removeButton}
-                            onClick={() => removeMember(member.memberId)}
-                            style={{ padding: '8px', border: 'none', backgroundColor: 'transparent', cursor: 'pointer', color: '#d1d5db', flexShrink: 0 }}
-                          >
-                            <i className="la la-trash" style={{ fontSize: '18px' }}></i>
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
 
-                  <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '16px', marginBottom: '0' }}>
-                    *Admins can view all careers regardless of specific access settings.
-                  </p>
-                </div>
-              </div>
 
-            </>
-          )}
 
           {activeStep === "cv-screening" && (
-            <>
-              <div className={styles.card}>
-                <header className={styles.cardHeader}>
-                  <span className={styles.icon}>
-                    <i className="la la-id-badge"></i>
-                  </span>
-                  <div className={styles.titleGroup}>
-                    <strong>CV Review Settings</strong>
-                    <span>Control how Jia endorses candidates</span>
-                  </div>
-                </header>
-                <div className={styles.cardInner}>
-                  {showCvScreeningValidation && !isStepComplete("cv-screening") && (
-                    <div className={styles.aiQuestionsValidation} role="alert" style={{ marginBottom: 20 }}>
-                      <span className={styles.aiQuestionsValidationIcon} aria-hidden="true">
-                        <i className="la la-exclamation-triangle"></i>
-                      </span>
-                      <span>
-                        {(() => {
-                          const missingDescription = !isDescriptionPresent(draft.description);
-                          const missingQuestions = preScreeningQuestions.length === 0 || !preScreeningQuestions.some((q: any) => typeof q?.question === "string" && q.question.trim().length > 0);
-                          if (missingDescription && missingQuestions) {
-                            return "Add a job description and at least one pre-screening question.";
-                          }
-                          if (missingDescription) {
-                            return "Add a job description to continue.";
-                          }
-                          if (missingQuestions) {
-                            return "Add at least one pre-screening question.";
-                          }
-                          return "Please complete required fields.";
-                        })()}
-                      </span>
-                    </div>
-                  )}
-                  <div className={styles.inlineField}>
-                    <label
-                      style={{
-                        fontSize: "16px",
-                        fontWeight: 700,
-                        color: "#111827",
-                        marginBottom: "8px",
-                      }}
-                    >
-                      CV Screening
-                    </label>
-                    <p style={{ margin: "0 0 12px 0", fontSize: "14px", lineHeight: "20px", color: "#4b5563" }}>
-                      Jia automatically endorses candidates who meet the chosen criteria.
-                    </p>
-                    <CustomDropdown
-                      screeningSetting={draft.screeningSetting}
-                      settingList={SCREENING_SETTING_OPTIONS}
-                      placeholder="Select screening setting"
-                      onSelectSetting={(value: string) => updateDraft({ screeningSetting: value })}
-                    />
-                  </div>
-                  <SecretPromptField
-                    inputId={secretPromptFieldIds.cv.input}
-                    descriptionId={secretPromptFieldIds.cv.description}
-                    label="CV Secret Prompt"
-                    helper="Secret prompts fine-tune how Jia reviews resumes before recommending candidates."
-                    placeholder="Enter a CV secret prompt (e.g. Emphasize candidates with product-led growth experience in SaaS)."
-                    value={draft.cvSecretPrompt || ""}
-                    onChange={(nextValue) => updateDraft({ cvSecretPrompt: nextValue })}
-                    iconSrc="/assets/icons/ai-sparkles.svg"
-                    iconAlt="CV Secret Prompt"
-                    tooltipContent={
-                      <>
-                        These prompts remain hidden from candidates and the public job portal. Additionally, only Admins and the Job Owner can view the secret prompt.
-                      </>
-                    }
-                    tooltipAriaLabel="Learn more about CV secret prompts"
-                  />
-                </div>
-              </div>
-
-              <div className={styles.card}>
-                <header className={styles.cardHeader}>
-                  <span className={styles.icon}>
-                    <i className="la la-list-alt"></i>
-                  </span>
-                  <div className={styles.titleGroup}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <strong>Pre-Screening Questions</strong>
-                        <span style={{ fontSize: "14px", fontWeight: 500, color: "#6b7280" }}>
-                          (optional)
-                        </span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleAddCustomPreScreenQuestion}
-                    style={{
-                      marginLeft: "auto",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "8px",
-                      padding: "10px 16px",
-                      borderRadius: "999px",
-                      border: "none",
-                      backgroundColor: "#111827",
-                      color: "#ffffff",
-                      fontSize: "14px",
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    <i className="la la-plus" aria-hidden="true"></i>
-                    Add custom
-                  </button>
-                </header>
-                <div className={styles.cardInner}>
-                  {preScreeningQuestions.length === 0 ? (
-                    <div
-                      style={{
-                        border: "1px solid #E5E7EB",
-                        borderRadius: "12px",
-                        padding: "24px",
-                        marginBottom: "24px",
-                        fontSize: "14px",
-                        color: "#4b5563",
-                        textAlign: "center",
-                      }}
-                    >
-                      No pre-screening questions added yet.
-                    </div>
-                  ) : (
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "16px",
-                        marginBottom: "24px",
-                      }}
-                    >
-                      {preScreeningQuestions.map((item: any, index: number) => {
-                        const resolvedAnswerType: PreScreenQuestionType =
-                          (typeof item?.answerType === "string"
-                            ? (item.answerType as PreScreenQuestionType)
-                            : Array.isArray(item?.options) && item.options.length
-                              ? "dropdown"
-                              : "short_text") || "short_text";
-
-                        const currentTypeOption =
-                          PRE_SCREEN_TYPE_OPTIONS.find(
-                            (option) => option.value === resolvedAnswerType
-                          ) || PRE_SCREEN_TYPE_OPTIONS[0];
-
-                        const optionList: Array<{ id: string; label: string }> = Array.isArray(
-                          item?.options
-                        )
-                          ? item.options
-                          : [];
-                        const isChoiceBased =
-                          resolvedAnswerType === "dropdown" || resolvedAnswerType === "checkboxes";
-                        const isRange = resolvedAnswerType === "range";
-                        const isShortAnswer = resolvedAnswerType === "short_text";
-                        const isLongAnswer = resolvedAnswerType === "long_text";
-                        const rangeMinValue = Number(item?.rangeMin ?? "");
-                        const rangeMaxValue = Number(item?.rangeMax ?? "");
-                        const showRangeError =
-                          isRange &&
-                          item?.rangeMin?.trim() &&
-                          item?.rangeMax?.trim() &&
-                          !Number.isNaN(rangeMinValue) &&
-                          !Number.isNaN(rangeMaxValue) &&
-                          rangeMinValue > rangeMaxValue;
-                        const typeButtonId = `pre-screen-type-trigger-${item.id}`;
-                        const typeMenuId = `pre-screen-type-menu-${item.id}`;
-                        const isTypeMenuOpen = openPreScreenTypeFor === item.id;
-                        const addOptionLabel = resolvedAnswerType === "checkboxes" ? "Add Choice" : "Add Option";
-                        const choiceHelperText = resolvedAnswerType === "checkboxes"
-                          ? "Candidates can select more than one choice."
-                          : "Candidates choose a single option.";
-                        const freeformHelperTextMap: Record<PreScreenQuestionType, string> = {
-                          short_text: "Candidates will provide a short written response.",
-                          long_text: "Candidates can write a longer, detailed answer.",
-                          dropdown: "",
-                          checkboxes: "",
-                          range: "Candidates pick a numeric range or value.",
-                        };
-                        const isDragEnabled = activeDragQuestionId === item.id;
-                        const isDraggingQuestion = draggingQuestionId === item.id;
-                        const isDragOverQuestion =
-                          dragOverQuestionId === item.id && draggingQuestionId !== item.id;
-
-                        return (
-                          <div
-                            key={item.id}
-                            className={classNames({
-                              [styles.questionCardDragging]: isDraggingQuestion,
-                              [styles.questionCardDragOver]: isDragOverQuestion,
-                            })}
-                            style={{
-                              border: "1px solid #E5E7EB",
-                              borderRadius: "16px",
-                              padding: "20px",
-                              paddingLeft: "28px",
-                              backgroundColor: "#fbfcff",
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: "16px",
-                              position: "relative",
-                              marginLeft: "64px",
-                              overflow: "visible",
-                            }}
-                            draggable={isDragEnabled || isDraggingQuestion}
-                            onDragStart={(event) => handlePreScreenDragStart(event, item.id)}
-                            onDragEnter={(event) => handlePreScreenDragOver(event, item.id)}
-                            onDragOver={(event) => handlePreScreenDragOver(event, item.id)}
-                            onDragLeave={() => handlePreScreenDragLeave(item.id)}
-                            onDrop={(event) => handlePreScreenDrop(event, item.id)}
-                            onDragEnd={handlePreScreenDragEnd}
-                          >
-                            <button
-                              type="button"
-                              className={styles.dragHandleButton}
-                              aria-label="Drag to reorder question"
-                              aria-grabbed={isDraggingQuestion}
-                              onMouseDown={() => setActiveDragQuestionId(item.id)}
-                              onMouseUp={() => {
-                                if (!draggingQuestionId) {
-                                  setActiveDragQuestionId(null);
-                                }
-                              }}
-                              onMouseLeave={() => {
-                                if (!draggingQuestionId) {
-                                  setActiveDragQuestionId(null);
-                                }
-                              }}
-                              onTouchStart={() => setActiveDragQuestionId(item.id)}
-                              onTouchEnd={() => {
-                                if (!draggingQuestionId) {
-                                  setActiveDragQuestionId(null);
-                                }
-                              }}
-                              onTouchCancel={() => {
-                                if (!draggingQuestionId) {
-                                  setActiveDragQuestionId(null);
-                                }
-                              }}
-                            >
-                              <span className={styles.dragHandleDots} aria-hidden="true">
-                                <span className={styles.dragHandleDot}></span>
-                                <span className={styles.dragHandleDot}></span>
-                                <span className={styles.dragHandleDot}></span>
-                                <span className={styles.dragHandleDot}></span>
-                                <span className={styles.dragHandleDot}></span>
-                                <span className={styles.dragHandleDot}></span>
-                              </span>
-                            </button>
-
-                            <div
-                              style={{
-                                flex: "1 1 auto",
-                                minWidth: 0,
-                                display: "flex",
-                                flexWrap: "wrap",
-                                gap: "16px",
-                                alignItems: "flex-start",
-                              }}
-                            >
-                              <div style={{ flex: "1 1 320px", minWidth: "260px" }}>
-                                <label
-                                  htmlFor={`pre-screen-question-${item.id}`}
-                                  style={{
-                                    display: "block",
-                                    fontSize: "13px",
-                                    fontWeight: 600,
-                                    color: "#6b7280",
-                                    marginBottom: "6px",
-                                    textTransform: "uppercase",
-                                    letterSpacing: "0.05em",
-                                  }}
-                                >
-                                  Question {index + 1}
-                                </label>
-                                <input
-                                  id={`pre-screen-question-${item.id}`}
-                                  value={item.question || ""}
-                                  onChange={(event) =>
-                                    handleUpdatePreScreenQuestion(item.id, {
-                                      question: event.target.value,
-                                    })
-                                  }
-                                  placeholder="Enter question"
-                                  style={{
-                                    width: "100%",
-                                    padding: "12px 14px",
-                                    borderRadius: "10px",
-                                    border: "1px solid #d1d5db",
-                                    fontSize: "15px",
-                                    color: "#111827",
-                                    backgroundColor: "#ffffff",
-                                  }}
-                                />
-                              </div>
-
-                              <div style={{ flex: "0 0 220px", minWidth: "220px", position: "relative" }}>
-                                <label
-                                  style={{
-                                    display: "block",
-                                    fontSize: "13px",
-                                    fontWeight: 600,
-                                    color: "#6b7280",
-                                    marginBottom: "6px",
-                                    textTransform: "uppercase",
-                                    letterSpacing: "0.05em",
-                                  }}
-                                >
-                                  Response type
-                                </label>
-                                <button
-                                  id={typeButtonId}
-                                  type="button"
-                                  onClick={() =>
-                                    setOpenPreScreenTypeFor((current) =>
-                                      current === item.id ? null : item.id
-                                    )
-                                  }
-                                  aria-haspopup="listbox"
-                                  aria-expanded={isTypeMenuOpen}
-                                  aria-controls={typeMenuId}
-                                  style={{
-                                    width: "100%",
-                                    padding: "12px 16px",
-                                    borderRadius: "12px",
-                                    border: isTypeMenuOpen ? "2px solid #2563eb" : "1px solid #d1d5db",
-                                    backgroundColor: "#ffffff",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "space-between",
-                                    gap: "12px",
-                                    fontSize: "15px",
-                                    fontWeight: 600,
-                                    color: "#111827",
-                                    boxShadow: isTypeMenuOpen ? "0 0 0 3px rgba(37,99,235,0.15)" : "none",
-                                    transition: "box-shadow 0.15s ease, border 0.15s ease",
-                                  }}
-                                >
-                                  <span style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                                    <span
-                                      style={{
-                                        width: "28px",
-                                        height: "28px",
-                                        borderRadius: "50%",
-                                        backgroundColor: "#f3f4f6",
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                        color: "#4b5563",
-                                      }}
-                                    >
-                                      <i className={currentTypeOption.icon} style={{ fontSize: "16px" }}></i>
-                                    </span>
-                                    <span>{currentTypeOption.label}</span>
-                                  </span>
-                                  <i
-                                    className="la la-angle-down"
-                                    aria-hidden="true"
-                                    style={{ fontSize: "18px", color: "#9ca3af" }}
-                                  ></i>
-                                </button>
-                                {isTypeMenuOpen && (
-                                  <div
-                                    id={typeMenuId}
-                                    role="listbox"
-                                    aria-label="Select response type"
-                                    style={{
-                                      position: "absolute",
-                                      top: "calc(100% + 8px)",
-                                      left: 0,
-                                      right: 0,
-                                      backgroundColor: "#ffffff",
-                                      borderRadius: "14px",
-                                      border: "1px solid #dbe2f0",
-                                      boxShadow: "0 16px 32px rgba(15, 23, 42, 0.14)",
-                                      padding: "8px 0",
-                                      zIndex: 40,
-                                    }}
-                                  >
-                                    {PRE_SCREEN_TYPE_OPTIONS.map((option) => {
-                                      const isSelected = option.value === resolvedAnswerType;
-                                      return (
-                                        <button
-                                          key={option.value}
-                                          type="button"
-                                          role="option"
-                                          aria-selected={isSelected}
-                                          onClick={() => {
-                                            handleUpdatePreScreenQuestion(item.id, {
-                                              answerType: option.value,
-                                            });
-                                            setOpenPreScreenTypeFor(null);
-                                          }}
-                                          style={{
-                                            width: "100%",
-                                            padding: "10px 18px",
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "space-between",
-                                            gap: "12px",
-                                            backgroundColor: isSelected ? "#f5f9ff" : "transparent",
-                                            border: "none",
-                                            cursor: "pointer",
-                                          }}
-                                        >
-                                          <span style={{ display: "flex", alignItems: "center", gap: "12px", color: "#111827", fontWeight: isSelected ? 700 : 500 }}>
-                                            <span
-                                              style={{
-                                                width: "28px",
-                                                height: "28px",
-                                                borderRadius: "50%",
-                                                backgroundColor: "#f3f4f6",
-                                                display: "flex",
-                                                alignItems: "center",
-                                                justifyContent: "center",
-                                                color: "#4b5563",
-                                              }}
-                                            >
-                                              <i className={option.icon} style={{ fontSize: "16px" }}></i>
-                                            </span>
-                                            {option.label}
-                                          </span>
-                                          {isSelected && (
-                                            <i className="la la-check" style={{ color: "#2563eb", fontSize: "16px" }}></i>
-                                          )}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-
-                            {isChoiceBased ? (
-                              <div
-                                style={{
-                                  display: "flex",
-                                  flexDirection: "column",
-                                  gap: "12px",
-                                }}
-                              >
-                                <div style={{ fontSize: "13px", color: "#6b7280" }}>{choiceHelperText}</div>
-                                {optionList.map((option, optionIndex) => {
-                                  const isCheckboxType = resolvedAnswerType === "checkboxes";
-                                  return (
-                                  <div
-                                    key={option.id}
-                                    style={{
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: "12px",
-                                    }}
-                                  >
-                                    {isCheckboxType ? (
-                                      <input
-                                        type="checkbox"
-                                        disabled
-                                        aria-hidden="true"
-                                        style={{
-                                          width: "18px",
-                                          height: "18px",
-                                          accentColor: "#111827",
-                                          cursor: "not-allowed",
-                                        }}
-                                      />
-                                    ) : (
-                                      <span
-                                        style={{
-                                          width: "32px",
-                                          height: "38px",
-                                          border: "1px solid #d1d5db",
-                                          borderRadius: "8px",
-                                          display: "flex",
-                                          alignItems: "center",
-                                          justifyContent: "center",
-                                          fontSize: "14px",
-                                          fontWeight: 600,
-                                          color: "#6b7280",
-                                          backgroundColor: "#f9fafb",
-                                        }}
-                                      >
-                                        {optionIndex + 1}
-                                      </span>
-                                    )}
-                                    <input
-                                      value={option.label || ""}
-                                      onChange={(event) =>
-                                        handleUpdatePreScreenOption(item.id, option.id, event.target.value)
-                                      }
-                                      placeholder="Option label"
-                                      style={{
-                                        flex: 1,
-                                        padding: "10px 14px",
-                                        borderRadius: "10px",
-                                        border: "1px solid #d1d5db",
-                                        fontSize: "15px",
-                                        color: "#111827",
-                                        backgroundColor: "#ffffff",
-                                      }}
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={() => handleRemovePreScreenOption(item.id, option.id)}
-                                      style={{
-                                        width: "36px",
-                                        height: "36px",
-                                        borderRadius: "50%",
-                                        border: "1px solid #e5e7eb",
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                        backgroundColor: "#ffffff",
-                                        color: "#9ca3af",
-                                        cursor: "pointer",
-                                      }}
-                                      aria-label={`Remove option ${optionIndex + 1}`}
-                                    >
-                                      <i className="la la-times" aria-hidden="true"></i>
-                                    </button>
-                                  </div>
-                                );
-                                })}
-                                <button
-                                  type="button"
-                                  onClick={() => handleAddPreScreenOption(item.id)}
-                                  style={{
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    gap: "6px",
-                                    fontSize: "13px",
-                                    fontWeight: 700,
-                                    letterSpacing: "0.04em",
-                                    textTransform: "uppercase",
-                                    color: "#18181b",
-                                    background: "transparent",
-                                    border: "none",
-                                    cursor: "pointer",
-                                    alignSelf: "flex-start",
-                                  }}
-                                >
-                                  <i className="la la-plus" aria-hidden="true"></i>
-                                  {addOptionLabel}
-                                </button>
-                              </div>
-                            ) : isRange ? (
-                              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                                <div className={styles.salaryGroup}>
-                                  <div
-                                    className={classNames(styles.inlineField, styles.salaryInput, {
-                                      [styles.errorField]: showRangeError,
-                                    })}
-                                  >
-                                    <label htmlFor={`pre-screen-range-min-${item.id}`}>Minimum Value</label>
-                                    <div className={styles.salaryInputControl}>
-                                      <span className={styles.currencyPrefix} aria-hidden="true">
-                                        ₱
-                                      </span>
-                                      <input
-                                        id={`pre-screen-range-min-${item.id}`}
-                                        type="number"
-                                        placeholder="0"
-                                        value={item.rangeMin || ""}
-                                        onChange={(event) =>
-                                          handleUpdatePreScreenRange(item.id, "rangeMin", event.target.value)
-                                        }
-                                        className={classNames({
-                                          [styles.errorInput]: showRangeError,
-                                        })}
-                                      />
-                                      <div className={styles.currencySuffixDropdown} aria-hidden="true">
-                                        <span
-                                          className={styles.currencyButton}
-                                          style={{ pointerEvents: "none", cursor: "default" }}
-                                        >
-                                          <span>PHP</span>
-                                          <i className="la la-angle-down" aria-hidden="true"></i>
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <div
-                                    className={classNames(styles.inlineField, styles.salaryInput, {
-                                      [styles.errorField]: showRangeError,
-                                    })}
-                                  >
-                                    <label htmlFor={`pre-screen-range-max-${item.id}`}>Maximum Value</label>
-                                    <div className={styles.salaryInputControl}>
-                                      <span className={styles.currencyPrefix} aria-hidden="true">
-                                        ₱
-                                      </span>
-                                      <input
-                                        id={`pre-screen-range-max-${item.id}`}
-                                        type="number"
-                                        placeholder="0"
-                                        value={item.rangeMax || ""}
-                                        onChange={(event) =>
-                                          handleUpdatePreScreenRange(item.id, "rangeMax", event.target.value)
-                                        }
-                                        className={classNames({
-                                          [styles.errorInput]: showRangeError,
-                                        })}
-                                      />
-                                      <div className={styles.currencySuffixDropdown} aria-hidden="true">
-                                        <span
-                                          className={styles.currencyButton}
-                                          style={{ pointerEvents: "none", cursor: "default" }}
-                                        >
-                                          <span>PHP</span>
-                                          <i className="la la-angle-down" aria-hidden="true"></i>
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                                {showRangeError && (
-                                  <div style={{ color: "#dc2626", fontSize: "12px" }}>
-                                    Minimum value cannot be greater than maximum value.
-                                  </div>
-                                )}
-                                <div style={{ fontSize: "13px", color: "#6b7280" }}>
-                                  Candidates provide a value within this range.
-                                </div>
-                              </div>
-                            ) : isShortAnswer ? (
-                              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                                <span
-                                  style={{
-                                    fontSize: "13px",
-                                    fontWeight: 600,
-                                    color: "#6b7280",
-                                    textTransform: "uppercase",
-                                    letterSpacing: "0.05em",
-                                  }}
-                                >
-                                  Candidate Response Preview
-                                </span>
-                                <input
-                                  type="text"
-                                  disabled
-                                  placeholder="Candidate will type a short answer"
-                                  style={{
-                                    padding: "12px 14px",
-                                    borderRadius: "10px",
-                                    border: "1px solid #d1d5db",
-                                    fontSize: "15px",
-                                    color: "#9ca3af",
-                                    backgroundColor: "#f9fafb",
-                                  }}
-                                />
-                                <div style={{ fontSize: "13px", color: "#6b7280" }}>
-                                  {freeformHelperTextMap[resolvedAnswerType]}
-                                </div>
-                              </div>
-                            ) : isLongAnswer ? (
-                              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                                <span
-                                  style={{
-                                    fontSize: "13px",
-                                    fontWeight: 600,
-                                    color: "#6b7280",
-                                    textTransform: "uppercase",
-                                    letterSpacing: "0.05em",
-                                  }}
-                                >
-                                  Candidate Response Preview
-                                </span>
-                                <textarea
-                                  disabled
-                                  rows={4}
-                                  placeholder="Candidate will type a detailed answer"
-                                  style={{
-                                    padding: "12px 14px",
-                                    borderRadius: "10px",
-                                    border: "1px solid #d1d5db",
-                                    fontSize: "15px",
-                                    color: "#9ca3af",
-                                    backgroundColor: "#f9fafb",
-                                    resize: "vertical",
-                                  }}
-                                />
-                                <div style={{ fontSize: "13px", color: "#6b7280" }}>
-                                  {freeformHelperTextMap[resolvedAnswerType]}
-                                </div>
-                              </div>
-                            ) : (
-                              <div
-                                style={{
-                                  fontSize: "13px",
-                                  color: "#6b7280",
-                                  backgroundColor: "#f9fafb",
-                                  borderRadius: "10px",
-                                  padding: "12px 16px",
-                                }}
-                              >
-                                {freeformHelperTextMap[resolvedAnswerType] ||
-                                  "Candidates will provide a short written response."}
-                              </div>
-                            )}
-
-                            <div
-                              style={{
-                                display: "flex",
-                                justifyContent: "flex-end",
-                              }}
-                            >
-                              <button
-                                type="button"
-                                onClick={() => handleRemovePreScreenQuestion(item.id)}
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: "8px",
-                                  padding: "10px 18px",
-                                  borderRadius: "12px",
-                                  border: "1px solid #fca5a5",
-                                  backgroundColor: "transparent",
-                                  color: "#b91c1c",
-                                  fontSize: "14px",
-                                  fontWeight: 700,
-                                  cursor: "pointer",
-                                }}
-                              >
-                                <i className="la la-trash" aria-hidden="true"></i>
-                                Delete Question
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                      <div
-                        className={classNames(styles.dragTailZone, {
-                          [styles.dragTailZoneActive]: isDragOverTail,
-                        })}
-                        style={{
-                          height: draggingQuestionId ? 36 : 0,
-                          marginTop: draggingQuestionId ? 12 : 0,
-                          opacity: draggingQuestionId ? 1 : 0,
-                          pointerEvents: draggingQuestionId ? "auto" : "none",
-                        }}
-                        onDragOver={(event) => {
-                          if (!draggingQuestionId) {
-                            return;
-                          }
-                          event.preventDefault();
-                          event.stopPropagation();
-                          event.dataTransfer.dropEffect = "move";
-                          if (!isDragOverTail) {
-                            setIsDragOverTail(true);
-                          }
-                          if (dragOverQuestionId) {
-                            setDragOverQuestionId(null);
-                          }
-                        }}
-                        onDragLeave={() => setIsDragOverTail(false)}
-                        onDrop={(event) => {
-                          if (!draggingQuestionId) {
-                            return;
-                          }
-                          event.preventDefault();
-                          event.stopPropagation();
-                          handleReorderPreScreenQuestions(draggingQuestionId, null);
-                          handlePreScreenDragEnd();
-                        }}
-                        aria-label="Drop to move question to the end"
-                      ></div>
-                    </div>
-                  )}
-
-                  <div style={{ fontSize: "14px", color: "#111827", fontWeight: 600, marginBottom: "12px" }}>
-                    Suggested Pre-screening Questions:
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                    {SUGGESTED_PRE_SCREENING_QUESTIONS.map((suggestion) => {
-                      const alreadyAdded = preScreeningQuestions.some(
-                        (item: any) =>
-                          typeof item?.question === "string" &&
-                          item.question.trim().toLowerCase() ===
-                            suggestion.prompt.trim().toLowerCase()
-                      );
-
-                      return (
-                        <div
-                          key={suggestion.prompt}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            gap: "12px",
-                          }}
-                        >
-                          <div>
-                            <div style={{ fontSize: "15px", fontWeight: 600, color: "#111827" }}>
-                              {suggestion.label}
-                            </div>
-                            <div style={{ fontSize: "14px", color: "#4b5563", marginTop: "2px" }}>
-                              {suggestion.prompt}
-                            </div>
-                            {suggestion.answerType === "dropdown" && suggestion.defaultOptions && (
-                              <div style={{ fontSize: "12px", color: "#9ca3af", marginTop: "8px" }}>
-                                Default options: {suggestion.defaultOptions.join(", ")}
-                              </div>
-                            )}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleAddPreScreenQuestion(suggestion.prompt, {
-                                answerType: suggestion.answerType ?? "dropdown",
-                                options: suggestion.defaultOptions,
-                              })
-                            }
-                            disabled={alreadyAdded}
-                            style={{
-                              borderRadius: "999px",
-                              border: "1px solid #E5E7EB",
-                              padding: "8px 18px",
-                              backgroundColor: alreadyAdded ? "#F3F4F6" : "#ffffff",
-                              color: alreadyAdded ? "#9ca3af" : "#111827",
-                              fontSize: "14px",
-                              fontWeight: 600,
-                              cursor: alreadyAdded ? "not-allowed" : "pointer",
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            {alreadyAdded ? "Added" : "Add"}
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </>
+            <CvReviewPreScreeningStep
+              draft={draft}
+              updateDraft={updateDraft}
+              showValidation={showCvScreeningValidation}
+              isStepComplete={isStepComplete("cv-screening")}
+              isDescriptionPresent={isDescriptionPresent}
+              secretPromptIds={secretPromptFieldIds.cv}
+              preScreeningQuestions={preScreeningQuestions}
+              openPreScreenTypeFor={openPreScreenTypeFor}
+              setOpenPreScreenTypeFor={setOpenPreScreenTypeFor}
+              activeDragQuestionId={activeDragQuestionId}
+              setActiveDragQuestionId={setActiveDragQuestionId}
+              draggingQuestionId={draggingQuestionId}
+              dragOverQuestionId={dragOverQuestionId}
+              setDragOverQuestionId={setDragOverQuestionId}
+              isDragOverTail={isDragOverTail}
+              setIsDragOverTail={setIsDragOverTail}
+              onAddPreScreenQuestion={handleAddPreScreenQuestion}
+              onAddCustomPreScreenQuestion={handleAddCustomPreScreenQuestion}
+              onUpdatePreScreenQuestion={handleUpdatePreScreenQuestion}
+              onUpdatePreScreenRange={handleUpdatePreScreenRange}
+              onAddPreScreenOption={handleAddPreScreenOption}
+              onUpdatePreScreenOption={handleUpdatePreScreenOption}
+              onRemovePreScreenOption={handleRemovePreScreenOption}
+              onRemovePreScreenQuestion={handleRemovePreScreenQuestion}
+              onReorderPreScreenQuestions={handleReorderPreScreenQuestions}
+              onPreScreenDragStart={handlePreScreenDragStart}
+              onPreScreenDragOver={handlePreScreenDragOver}
+              onPreScreenDrop={handlePreScreenDrop}
+              onPreScreenDragLeave={handlePreScreenDragLeave}
+              onPreScreenDragEnd={handlePreScreenDragEnd}
+            />
           )}
 
           {activeStep === "ai-setup" && (
-            <>
-              <div className={styles.card}>
-                <header className={classNames(styles.cardHeader, styles.aiCardHeader)}>
-                  <div className={styles.aiCardHeaderLeft}>
-                    <div className={styles.aiCardBadge}>1</div>
-                    <div className={styles.titleGroup}>
-                      <strong>AI Interview Settings</strong>
-                      <span>Guide Jia’s live interview experience.</span>
-                    </div>
-                  </div>
-                </header>
-                <div className={classNames(styles.cardInner, styles.aiSettingsInner)}>
-                  <section className={styles.aiSettingSection}>
-                    <div className={styles.aiSettingHeading}>
-                      <h3>AI Interview Screening</h3>
-                      <p>Jia automatically endorses candidates who meet the chosen criteria.</p>
-                    </div>
-                    <div className={styles.aiSettingControl}>
-                      <CustomDropdown
-                        screeningSetting={draft.screeningSetting}
-                        settingList={SCREENING_SETTING_OPTIONS}
-                        placeholder="Select screening setting"
-                        onSelectSetting={(value: string) => updateDraft({ screeningSetting: value })}
-                      />
-                    </div>
-                  </section>
-
-                  <div className={styles.aiSettingDivider} aria-hidden="true"></div>
-
-                  <section className={classNames(styles.aiSettingSection, styles.requireVideoSection)}>
-                    <div className={styles.aiSettingHeading}>
-                      <h3>Require Video on Interview</h3>
-                      <p>
-                        Require candidates to keep their camera on. Recordings will appear on their
-                        analysis page.
-                      </p>
-                    </div>
-                    <div className={styles.requireVideoToggleRow}>
-                      <div className={styles.requireVideoLabel}>
-                        <span className={styles.requireVideoIcon} aria-hidden="true">
-                          <i className="la la-video"></i>
-                        </span>
-                        <span>Require Video Interview</span>
-                      </div>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={requireVideoSetting}
-                        onClick={() => updateDraft({ requireVideo: !requireVideoSetting })}
-                        className={classNames(styles.toggle, requireVideoSetting && styles.toggleOn)}
-                      >
-                        <span className={styles.toggleThumb}></span>
-                      </button>
-                      <span className={styles.toggleValue}>{requireVideoSetting ? "Yes" : "No"}</span>
-                    </div>
-                  </section>
-
-                  <SecretPromptField
-                    inputId={secretPromptFieldIds.ai.input}
-                    descriptionId={secretPromptFieldIds.ai.description}
-                    label="AI Interview Secret Prompt"
-                    helper="Shape Jia's interview scoring focus; this prompt does not affect CV screening."
-                    placeholder="Enter an interview secret prompt (e.g. Highlight storytelling around client impact and coaching experience)."
-                    value={draft.aiInterviewSecretPrompt || ""}
-                    onChange={(nextValue) => updateDraft({ aiInterviewSecretPrompt: nextValue })}
-                    withDivider
-                    iconSrc="/assets/icons/ai-sparkles.svg"
-                    iconAlt="AI Secret Prompt"
-                  />
-                </div>
-              </div>
-
-              <div className={styles.card}>
-                <header className={classNames(styles.cardHeader, styles.aiCardHeader)}>
-                  <div className={styles.aiCardHeaderLeft}>
-                    <div className={styles.aiCardBadge}>2</div>
-                    <div className={styles.titleGroup}>
-                      <strong>AI Interview Questions</strong>
-                      <span>Create and manage Jia’s interview prompts.</span>
-                    </div>
-                  </div>
-                  <div className={styles.aiCardHeaderRight}>
-                    <span className={styles.aiQuestionsCounter} aria-live="polite">
-                      {totalInterviewQuestionCount}
-                    </span>
-                    <button
-                      type="button"
-                      className={styles.aiQuestionsGenerateAll}
-                      onClick={handleGenerateAllInterviewQuestions}
-                      disabled={isGeneratingQuestions}
-                    >
-                      <i className="la la-sparkles" aria-hidden="true"></i>
-                      {pendingQuestionGeneration === "all" ? "Generating..." : "Generate all questions"}
-                    </button>
-                  </div>
-                </header>
-                <div className={styles.aiQuestionsBody}>
-                  {showAiQuestionValidation && (
-                    <div className={styles.aiQuestionsValidation} role="alert">
-                      <span className={styles.aiQuestionsValidationIcon} aria-hidden="true">
-                        <i className="la la-exclamation-triangle"></i>
-                      </span>
-                      <span>Please add at least 5 interview questions.</span>
-                    </div>
-                  )}
-                  <div className={styles.aiQuestionsList} aria-label="AI interview question controls">
-                        {questions.map((group) => {
-                          const groupQuestions = Array.isArray(group.questions)
-                            ? group.questions.filter((question: any) => isInterviewQuestion(question))
-                            : [];
-                          const tailZoneActive =
-                            Boolean(draggingInterviewQuestionId) &&
-                            activeDragInterviewGroupId === group.id;
-                          const tailZoneStyle: CSSProperties = {
-                            height: tailZoneActive ? 36 : 0,
-                            marginTop: tailZoneActive ? 12 : 0,
-                            opacity: tailZoneActive ? 1 : 0,
-                            pointerEvents: tailZoneActive ? "auto" : "none",
-                          };
-
-                          return (
-                            <div className={styles.aiQuestionsRow} key={group.id}>
-                              <div className={styles.aiQuestionRowHeader}>
-                                <div className={styles.aiQuestionCategory}>
-                                  <span>{group.category}</span>
-                                </div>
-                              </div>
-                              {groupQuestions.length > 0 ? (
-                                <div className={styles.aiQuestionList}>
-                                  {groupQuestions.map((question: any, index: number) => {
-                                    const questionId = question?.id ?? `ai-question-${group.id}-${index}`;
-                                    const questionText =
-                                      typeof question?.question === "string"
-                                        ? question.question
-                                        : "";
-                                        const isDragging = draggingInterviewQuestionId === questionId;
-                                        const isDragOver = dragOverInterviewQuestionId === questionId && draggingInterviewQuestionId !== questionId;
-
-                                    return (
-                                          <div
-                                            className={classNames(styles.aiQuestionListItem, {
-                                              [styles.questionCardDragging]: isDragging,
-                                              [styles.questionCardDragOver]: isDragOver,
-                                            })}
-                                            key={questionId}
-                                            draggable={isDragging}
-                                            onDragEnter={(e) => handleInterviewDragEnter(e, questionId)}
-                                            onDragOver={(e) => handleInterviewDragOver(e, questionId)}
-                                            onDragLeave={() => handleInterviewDragLeave(questionId)}
-                                            onDrop={(e) => handleInterviewDrop(e, questionId)}
-                                            onDragEnd={handleInterviewDragEnd}
-                                          >
-                                            <button
-                                              type="button"
-                                              className={styles.dragHandleButton}
-                                              aria-label="Drag to reorder interview question"
-                                              aria-grabbed={isDragging}
-                                              draggable
-                                              onDragStart={(e) => handleInterviewDragStart(e, questionId, group.id)}
-                                            >
-                                              <span className={styles.dragHandleDots} aria-hidden="true">
-                                                <span className={styles.dragHandleDot}></span>
-                                                <span className={styles.dragHandleDot}></span>
-                                                <span className={styles.dragHandleDot}></span>
-                                                <span className={styles.dragHandleDot}></span>
-                                                <span className={styles.dragHandleDot}></span>
-                                                <span className={styles.dragHandleDot}></span>
-                                              </span>
-                                            </button>
-                                            <div className={styles.aiQuestionListContent}>
-                                              <span aria-label="Interview question">{questionText}</span>
-                                            </div>
-                                            <div className={styles.aiQuestionListActions}>
-                                              <button
-                                                type="button"
-                                                className={classNames(
-                                                  styles.aiQuestionListButton,
-                                                  styles.aiQuestionListButtonWithLabel
-                                                )}
-                                                onClick={() =>
-                                                  openQuestionModal("edit", group.id, {
-                                                    id: questionId,
-                                                    question: questionText,
-                                                  })
-                                                }
-                                                aria-label="Edit interview question"
-                                              >
-                                                <i className="la la-pen" aria-hidden="true"></i>
-                                                <span className={styles.aiQuestionListButtonLabel}>Edit</span>
-                                              </button>
-                                              <button
-                                                type="button"
-                                                className={classNames(styles.aiQuestionListButton, styles.aiQuestionListButtonDelete)}
-                                                onClick={() =>
-                                                  openQuestionModal("delete", group.id, {
-                                                    id: questionId,
-                                                    question: questionText,
-                                                  })
-                                                }
-                                                aria-label="Delete interview question"
-                                              >
-                                                <i className="la la-trash-alt" aria-hidden="true"></i>
-                                              </button>
-                                            </div>
-                                          </div>
-                                    );
-                                  })}
-                                  <div
-                                    className={classNames(styles.dragTailZone, {
-                                      [styles.dragTailZoneActive]: interviewTailHoverGroupId === group.id,
-                                    })}
-                                    style={tailZoneStyle}
-                                    onDragOver={(event) => handleInterviewTailDragOver(event, group.id)}
-                                    onDragLeave={() => handleInterviewTailDragLeave(group.id)}
-                                    onDrop={(event) => handleInterviewTailDrop(event, group.id)}
-                                    aria-label="Drop to move question to the end of this category"
-                                  ></div>
-                                </div>
-                              ) : (
-                                <>
-                                  <div className={styles.aiQuestionEmpty}>
-                                    <i className="la la-info-circle" aria-hidden="true"></i>
-                                    <span>No questions added yet.</span>
-                                  </div>
-                                  <div
-                                    className={classNames(styles.dragTailZone, {
-                                      [styles.dragTailZoneActive]: interviewTailHoverGroupId === group.id,
-                                    })}
-                                    style={tailZoneStyle}
-                                    onDragOver={(event) => handleInterviewTailDragOver(event, group.id)}
-                                    onDragLeave={() => handleInterviewTailDragLeave(group.id)}
-                                    onDrop={(event) => handleInterviewTailDrop(event, group.id)}
-                                    aria-label="Drop to move question to this category"
-                                  ></div>
-                                </>
-                              )}
-                              <div className={styles.aiQuestionActions}>
-                                <div className={styles.aiQuestionActionsButtons}>
-                                  <button
-                                    type="button"
-                                    className={styles.aiQuestionPrimary}
-                                    onClick={() => handleGenerateQuestionsForCategory(group.category)}
-                                    disabled={isGeneratingQuestions}
-                                  >
-                                    <i className="la la-sparkles" aria-hidden="true"></i>
-                                    {pendingQuestionGeneration === group.category
-                                      ? "Generating..."
-                                      : "Generate questions"}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className={styles.aiQuestionSecondary}
-                                    onClick={() => openQuestionModal("add", group.id)}
-                                    disabled={isGeneratingQuestions}
-                                  >
-                                    <i className="la la-plus" aria-hidden="true"></i>
-                                    Manually add
-                                  </button>
-                                </div>
-                                <div className={styles.aiQuestionCounterGroup}>
-                                  <span className={styles.aiQuestionCounterLabel}># of questions to ask</span>
-                                  <span
-                                    className={styles.aiQuestionCounterValue}
-                                    aria-live="polite"
-                                  >
-                                    {groupQuestions.length}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                  </div>
-                </div>
-              </div>
-            </>
+            <AiInterviewSetupStep
+              draft={draft}
+              updateDraft={updateDraft}
+              secretPromptIds={secretPromptFieldIds.ai}
+              totalInterviewQuestionCount={totalInterviewQuestionCount}
+              showAiQuestionValidation={showAiQuestionValidation}
+              questions={questions}
+              isInterviewQuestion={isInterviewQuestion}
+              draggingInterviewQuestionId={draggingInterviewQuestionId}
+              dragOverInterviewQuestionId={dragOverInterviewQuestionId}
+              activeDragInterviewGroupId={activeDragInterviewGroupId}
+              interviewTailHoverGroupId={interviewTailHoverGroupId}
+              pendingQuestionGeneration={pendingQuestionGeneration}
+              isGeneratingQuestions={isGeneratingQuestions}
+              onGenerateAll={handleGenerateAllInterviewQuestions}
+              onGenerateForCategory={handleGenerateQuestionsForCategory}
+              onDragStart={handleInterviewDragStart}
+              onDragEnter={handleInterviewDragEnter}
+              onDragOver={handleInterviewDragOver}
+              onDragLeave={handleInterviewDragLeave}
+              onDrop={handleInterviewDrop}
+              onDragEnd={handleInterviewDragEnd}
+              onTailDragOver={handleInterviewTailDragOver}
+              onTailDragLeave={handleInterviewTailDragLeave}
+              onTailDrop={handleInterviewTailDrop}
+              openQuestionModal={openQuestionModal}
+            />
           )}
 
           {activeStep === "pipeline" && (
-            <div className={styles.card}>
-              <header className={styles.cardHeader}>
-                <span className={styles.icon}>
-                  <i className="la la-project-diagram"></i>
-                </span>
-                <div className={styles.titleGroup}>
-                  <strong>Pipeline stages</strong>
-                  <span>Map the journey from application to hire</span>
-                </div>
-              </header>
-              <div className={styles.cardInner}>
-                <div className={styles.pipelineCard}>
-                  <span className={styles.pipelineIcon}>
-                    <i className="la la-tools"></i>
-                  </span>
-                  <h3>Pipeline builder coming soon</h3>
-                  <p>
-                    We are preparing a dedicated pipeline builder for recruiters. Save this
-                    career now and you can define stages once the feature is released.
-                  </p>
-                </div>
-                <footer className={styles.stepFooter}>
-                  <button className={styles.backButton} onClick={goToPreviousStep}>
-                    <i className="la la-arrow-left"></i>
-                    Back to AI setup
-                  </button>
-                  <button className={styles.nextButton} onClick={goToNextStep}>
-                    Continue to review
-                    <i className="la la-arrow-right"></i>
-                  </button>
-                </footer>
-              </div>
-            </div>
+            <PipelineStagesStep
+              onBack={goToPreviousStep}
+              onNext={goToNextStep}
+            />
           )}
 
           {activeStep === "review" && (
-            <div className={styles.reviewStandaloneContainer}>
-              <div className={styles.reviewAccordion}>
-                {reviewSections.map((section) => {
-                  const isOpen = expandedReviewSections[section.key];
-                  return (
-                    <div
-                      key={section.key}
-                      className={classNames(styles.reviewAccordionItem, {
-                        [styles.reviewAccordionItemOpen]: isOpen,
-                      })}
-                    >
-                      <div
-                        className={classNames(styles.reviewAccordionHeader, {
-                          [styles.reviewAccordionHeaderOpen]: isOpen,
-                        })}
-                      >
-                        <button
-                          type="button"
-                          className={styles.reviewAccordionToggle}
-                          onClick={() => toggleReviewSection(section.key)}
-                          aria-expanded={isOpen}
-                        >
-                          <span
-                            className={classNames(
-                              styles.reviewAccordionIcon,
-                              styles.reviewAccordionChevron
-                            )}
-                            aria-hidden="true"
-                          >
-                            <i
-                              className={classNames("la", isOpen ? "la-angle-up" : "la-angle-down")}
-                            ></i>
-                          </span>
-                          <div className={styles.reviewAccordionHeaderLeft}>
-                            <span className={styles.reviewAccordionTitle}>{section.title}</span>
-                            <span className={styles.reviewAccordionSubtitle}>{section.subtitle}</span>
-                          </div>
-                        </button>
-                        <div className={styles.reviewAccordionHeaderRight}>
-                          <button
-                            type="button"
-                            className={styles.reviewAccordionEditButton}
-                            onClick={(event) => handleReviewSectionEdit(section.key, event)}
-                            aria-label={`Edit ${section.title}`}
-                          >
-                            <i className="la la-pen" aria-hidden="true"></i>
-                          </button>
-                        </div>
-                      </div>
-                      {isOpen && section.render()}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            <ReviewCareerStep
+              sections={reviewSections}
+              expandedSections={expandedReviewSections}
+              onToggleSection={toggleReviewSection}
+              onEditSection={handleReviewSectionEdit}
+            />
           )}
         </div>
 
