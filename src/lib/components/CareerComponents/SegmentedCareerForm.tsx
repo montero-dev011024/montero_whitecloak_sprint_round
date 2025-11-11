@@ -434,6 +434,7 @@ export default function SegmentedCareerForm({
     [questions]
   );
   const isGeneratingQuestions = pendingQuestionGeneration !== null;
+  const isOnReviewStep = activeStep === "review";
 
   useEffect(() => {
     if (totalInterviewQuestionCount >= 5 && showAiQuestionValidation) {
@@ -462,6 +463,28 @@ export default function SegmentedCareerForm({
       return `1 ${singular.toLowerCase()}`;
     }
     return `${count} ${pluralLabel.toLowerCase()}`;
+  };
+
+  const renderScreeningDescription = (setting?: string): ReactNode => {
+    switch (setting) {
+      case "Good Fit and above":
+        return (
+          <>
+            Automatically endorse candidates who are {" "}
+            <span className={styles.reviewCvBadge}>Good Fit</span> and above
+          </>
+        );
+      case "Only Strong Fit":
+        return (
+          <>
+            Automatically endorse candidates who are {" "}
+            <span className={styles.reviewCvBadge}>Strong Fit</span> only
+          </>
+        );
+      case "No Automatic Promotion":
+      default:
+        return "Automatic endorsements are turned off.";
+    }
   };
 
   const jobDescriptionMarkup = isDescriptionPresent(draft.description)
@@ -2646,6 +2669,11 @@ export default function SegmentedCareerForm({
 
         return;
       }
+
+      if (isOnReviewStep || currentStepIndex === segmentedSteps.length - 1) {
+        setShowSaveModal(status);
+        return;
+      }
     }
 
     const payload = formatCareerPayload(status);
@@ -2761,242 +2789,366 @@ export default function SegmentedCareerForm({
     return "Not saved yet";
   }, [draft.context?.lastPersistedAt, career?.updatedAt]);
 
-  const renderCareerReviewSection = () => (
-    <div className={styles.reviewAccordionBody}>
-      <div className={styles.reviewMetaRow}>
-        <span>Last saved: {lastSavedTimestamp}</span>
-      </div>
-      <div className={styles.reviewSectionGroup}>
-        <h5 className={styles.reviewSectionTitle}>Job information</h5>
-        <dl className={styles.reviewDataGrid}>
-          <div className={styles.reviewDataItem}>
-            <dt>Job title</dt>
-            <dd>{draft.jobTitle || "Not specified"}</dd>
-          </div>
-          <div className={styles.reviewDataItem}>
-            <dt>Employment type</dt>
-            <dd>{draft.employmentType || "Not specified"}</dd>
-          </div>
-          <div className={styles.reviewDataItem}>
-            <dt>Work arrangement</dt>
-            <dd>{draft.workSetup || "Not specified"}</dd>
-          </div>
-          <div className={styles.reviewDataItem}>
-            <dt>Country</dt>
-            <dd>{draft.location.country || "Not specified"}</dd>
-          </div>
-          <div className={styles.reviewDataItem}>
-            <dt>State / Province</dt>
-            <dd>{draft.location.province || "Not specified"}</dd>
-          </div>
-          <div className={styles.reviewDataItem}>
-            <dt>City</dt>
-            <dd>{draft.location.city || "Not specified"}</dd>
-          </div>
-          <div className={styles.reviewDataItem}>
-            <dt>Minimum salary</dt>
-            <dd>{minimumSalaryDisplay}</dd>
-          </div>
-          <div className={styles.reviewDataItem}>
-            <dt>Maximum salary</dt>
-            <dd>{maximumSalaryDisplay}</dd>
-          </div>
-        </dl>
-      </div>
-      <div className={styles.reviewSectionGroup}>
-        <h5 className={styles.reviewSectionTitle}>Job description</h5>
-        {jobDescriptionMarkup ? (
-          <div
-            className={styles.reviewRichText}
-            dangerouslySetInnerHTML={jobDescriptionMarkup}
-          ></div>
-        ) : (
-          <p className={styles.reviewEmptyState}>No description provided.</p>
-        )}
-      </div>
-      <div className={styles.reviewSectionGroup}>
-        <h5 className={styles.reviewSectionTitle}>Team access</h5>
-        {teamMembers.length ? (
-          <ul className={styles.reviewTeamList}>
-            {teamMembers.map((member: any) => {
-              const displayName = member.name || member.email || "Member";
-              const displayEmail = member.email || "—";
-              return (
-                <li key={member.memberId} className={styles.reviewTeamItem}>
-                  {member.image ? (
-                    <img
-                      src={member.image}
-                      alt={displayName}
-                      className={styles.reviewTeamAvatarImage}
-                    />
-                  ) : (
-                    <span className={styles.reviewTeamAvatarFallback} aria-hidden="true">
-                      {(displayName || "?").charAt(0)}
-                    </span>
-                  )}
-                  <div className={styles.reviewTeamInfo}>
-                    <span className={styles.reviewTeamName}>{displayName}</span>
-                    <span className={styles.reviewTeamEmail}>{displayEmail}</span>
-                  </div>
-                  <span className={styles.reviewTeamRole}>{getMemberRoleLabel(member.role)}</span>
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <p className={styles.reviewEmptyState}>No team members assigned.</p>
-        )}
-      </div>
-    </div>
-  );
+  const renderCareerReviewSection = () => {
+    const jobInformationRows: Array<
+      Array<{
+        label: string;
+        value: string;
+        colSpan?: number;
+        emphasis?: boolean;
+      }>
+    > = [
+      [
+        {
+          label: "Job Title",
+          value: draft.jobTitle || "Not specified",
+          emphasis: true,
+        },
+      ],
+      [
+        {
+          label: "Employment Type",
+          value: draft.employmentType || "Not specified",
+        },
+        {
+          label: "Work Arrangement",
+          value: draft.workSetup || "Not specified",
+        },
+      ],
+      [
+        {
+          label: "Country",
+          value: draft.location.country || "Not specified",
+        },
+        {
+          label: "State / Province",
+          value: draft.location.province || "Not specified",
+        },
+        {
+          label: "City",
+          value: draft.location.city || "Not specified",
+        },
+      ],
+      [
+        {
+          label: "Minimum Salary",
+          value: minimumSalaryDisplay,
+        },
+        {
+          label: "Maximum Salary",
+          value: maximumSalaryDisplay,
+        },
+      ],
+    ];
 
-  const renderCvReviewSection = () => (
-    <div className={styles.reviewAccordionBody}>
-      <div className={styles.reviewSectionGroup}>
-        <h5 className={styles.reviewSectionTitle}>CV screening settings</h5>
-        <dl className={styles.reviewDataGrid}>
-          <div className={styles.reviewDataItem}>
-            <dt>Auto-endorse rule</dt>
-            <dd>{draft.screeningSetting || "Not configured"}</dd>
-          </div>
-          <div className={styles.reviewDataItem}>
-            <dt>Pre-screening questions</dt>
-            <dd>
-              {preScreeningQuestions.length
-                ? `${preScreeningQuestions.length} configured`
-                : "None configured"}
-            </dd>
-          </div>
-        </dl>
-      </div>
-      <div className={styles.reviewSectionGroup}>
-        <h5 className={styles.reviewSectionTitle}>CV secret prompt</h5>
-        {draft.cvSecretPrompt ? (
-          <div className={styles.reviewPromptBox}>{draft.cvSecretPrompt}</div>
-        ) : (
-          <p className={styles.reviewEmptyState}>No secret prompt provided.</p>
-        )}
-      </div>
-      <div className={styles.reviewSectionGroup}>
-        <h5 className={styles.reviewSectionTitle}>Pre-screening questions</h5>
-        {preScreeningQuestions.length ? (
-          <ol className={styles.reviewQuestionList}>
-            {preScreeningQuestions.map((question: any, index: number) => {
-              const questionText =
-                typeof question?.question === "string" && question.question.trim().length
-                  ? question.question.trim()
-                  : `Question ${index + 1}`;
-              const answerType =
-                typeof question?.answerType === "string"
-                  ? (question.answerType as PreScreenQuestionType)
-                  : "short_text";
-              const optionLabels = Array.isArray(question?.options)
-                ? question.options
-                    .map((option: any) => option?.label)
-                    .filter((label: any) => typeof label === "string" && label.trim().length)
-                : [];
-              const hasRangeValues = answerType === "range";
+    return (
+      <div className={styles.reviewAccordionBody}>
+        <div className={styles.reviewMetaRow}>
+          <span>Last saved: {lastSavedTimestamp}</span>
+        </div>
+        <div className={classNames(styles.reviewSectionGroup, styles.reviewSectionFlush)}>
+          <div className={styles.reviewDataTable}>
+            {jobInformationRows.map((row, rowIndex) => {
+              const columnCount = row.reduce((total, cell) => total + (cell.colSpan ?? 1), 0);
               return (
-                <li key={question?.id ?? `pre-screen-${index}`} className={styles.reviewQuestionItem}>
-                  <div className={styles.reviewQuestionHeader}>
-                    <span className={styles.reviewQuestionText}>
-                      {index + 1}. {questionText}
-                    </span>
-                    <span className={styles.reviewPill}>{getPreScreenTypeLabel(answerType)}</span>
-                  </div>
-                  {optionLabels.length > 0 && (
-                    <ul className={styles.reviewQuestionSublist}>
-                      {optionLabels.map((label: string, optionIndex: number) => (
-                        <li key={`${question?.id ?? index}-option-${optionIndex}`}>{label}</li>
-                      ))}
-                    </ul>
-                  )}
-                  {hasRangeValues && (
-                    <div className={styles.reviewQuestionRange}>
-                      Range: {question?.rangeMin || "—"} – {question?.rangeMax || "—"}
+                <div
+                  key={`career-info-row-${rowIndex}`}
+                  className={styles.reviewDataRow}
+                  data-columns={columnCount}
+                >
+                  {row.map((cell, cellIndex) => (
+                    <div
+                      key={`career-info-cell-${rowIndex}-${cellIndex}`}
+                      className={classNames(styles.reviewDataCell, {
+                        [styles.reviewDataCellEmphasis]: cell.emphasis,
+                      })}
+                      style={
+                        cell.colSpan && cell.colSpan > 1
+                          ? ({ gridColumn: `span ${cell.colSpan}` } as CSSProperties)
+                          : undefined
+                      }
+                    >
+                      <span className={styles.reviewDataLabel}>{cell.label}</span>
+                      <span className={styles.reviewDataValue}>{cell.value}</span>
                     </div>
-                  )}
-                </li>
+                  ))}
+                </div>
               );
             })}
-          </ol>
-        ) : (
-          <p className={styles.reviewEmptyState}>No pre-screening questions configured.</p>
-        )}
+          </div>
+        </div>
+        <div className={styles.reviewSectionGroup}>
+          <h5 className={styles.reviewSectionTitle}>Job Description</h5>
+          {jobDescriptionMarkup ? (
+            <div
+              className={classNames(styles.reviewRichText, styles.reviewRichTextFramed)}
+              dangerouslySetInnerHTML={jobDescriptionMarkup}
+            ></div>
+          ) : (
+            <p className={styles.reviewEmptyState}>No description provided.</p>
+          )}
+        </div>
+        <div className={styles.reviewSectionGroup}>
+          <h5 className={styles.reviewSectionTitle}>Team Access</h5>
+          {teamMembers.length ? (
+            <div className={styles.reviewTeamTable}>
+              {teamMembers.map((member: any) => {
+                const displayName = member.name || member.email || "Member";
+                const displayEmail = member.email || "—";
+                return (
+                  <div key={member.memberId} className={styles.reviewTeamRow}>
+                    <div className={styles.reviewTeamIdentity}>
+                      {member.image ? (
+                        <img
+                          src={member.image}
+                          alt={displayName}
+                          className={styles.reviewTeamAvatarImage}
+                        />
+                      ) : (
+                        <span className={styles.reviewTeamAvatarFallback} aria-hidden="true">
+                          {(displayName || "?").charAt(0)}
+                        </span>
+                      )}
+                      <div className={styles.reviewTeamPrimary}>
+                        <span className={styles.reviewTeamName}>{displayName}</span>
+                        <span className={styles.reviewTeamEmail}>{displayEmail}</span>
+                      </div>
+                    </div>
+                    <span className={styles.reviewTeamRole}>{getMemberRoleLabel(member.role)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className={styles.reviewEmptyState}>No team members assigned.</p>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
+
+  const renderCvReviewSection = () => {
+    const totalPreScreenQuestions = preScreeningQuestions.length;
+    const secretPromptLines =
+      typeof draft.cvSecretPrompt === "string"
+        ? draft.cvSecretPrompt
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter((line) => line.length > 0)
+        : [];
+    const screeningDescription = renderScreeningDescription(draft.screeningSetting);
+
+    return (
+      <div className={classNames(styles.reviewAccordionBody, styles.reviewCvBody)}>
+        <div className={styles.reviewCvCard}>
+          <div className={styles.reviewCvHeader}>
+            <div className={styles.reviewCvHeaderText}>
+              <p className={styles.reviewCvTitle}>CV Screening</p>
+              <p className={styles.reviewCvDescription}>{screeningDescription}</p>
+            </div>
+            <button
+              type="button"
+              className={styles.reviewCvEditButton}
+              onClick={() => setActiveStep("cv-screening")}
+              aria-label="Edit CV screening settings"
+            >
+              <i className="la la-pen"></i>
+            </button>
+          </div>
+
+          <div className={styles.reviewCvDivider} aria-hidden="true"></div>
+
+          <section className={styles.reviewCvSection}>
+            <header className={styles.reviewCvSectionHeader}>
+              <div className={styles.reviewCvSectionTitleGroup}>
+                <span className={styles.reviewCvSectionIcon} aria-hidden="true">
+                  ✨
+                </span>
+                <span className={styles.reviewCvSectionTitle}>CV Secret Prompt</span>
+              </div>
+            </header>
+            {secretPromptLines.length ? (
+              <ul className={styles.reviewCvPromptList}>
+                {secretPromptLines.map((line, index) => (
+                  <li key={`secret-prompt-${index}`}>{line}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className={styles.reviewCvEmpty}>No secret prompt provided.</p>
+            )}
+          </section>
+
+          <div className={styles.reviewCvDivider} aria-hidden="true"></div>
+
+          <section className={styles.reviewCvSection}>
+            <header className={styles.reviewCvSectionHeader}>
+              <div className={styles.reviewCvSectionTitleGroup}>
+                <span className={styles.reviewCvSectionTitle}>Pre-Screening Questions</span>
+              </div>
+              <span className={styles.reviewCvCountBadge}>{totalPreScreenQuestions}</span>
+            </header>
+            {totalPreScreenQuestions ? (
+              <ol className={styles.reviewCvQuestionList}>
+                {preScreeningQuestions.map((question: any, index: number) => {
+                  const questionText =
+                    typeof question?.question === "string" && question.question.trim().length
+                      ? question.question.trim()
+                      : `Question ${index + 1}`;
+                  const answerType =
+                    typeof question?.answerType === "string"
+                      ? (question.answerType as PreScreenQuestionType)
+                      : "short_text";
+                  const optionLabels = Array.isArray(question?.options)
+                    ? question.options
+                        .map((option: any) => option?.label)
+                        .filter((label: any) => typeof label === "string" && label.trim().length)
+                    : [];
+                  const hasRangeValues = answerType === "range";
+
+                  return (
+                    <li key={question?.id ?? `pre-screen-${index}`} className={styles.reviewCvQuestion}>
+                      <div className={styles.reviewCvQuestionText}>{questionText}</div>
+                      {optionLabels.length > 0 && (
+                        <ul className={styles.reviewCvOptionList}>
+                          {optionLabels.map((label: string, optionIndex: number) => (
+                            <li key={`${question?.id ?? index}-option-${optionIndex}`}>{label}</li>
+                          ))}
+                        </ul>
+                      )}
+                      {hasRangeValues && (
+                        <div className={styles.reviewCvQuestionMeta}>
+                          Preferred range: {question?.rangeMin || "—"} – {question?.rangeMax || "—"}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ol>
+            ) : (
+              <p className={styles.reviewCvEmpty}>No pre-screening questions configured.</p>
+            )}
+          </section>
+        </div>
+      </div>
+    );
+  };
 
   const renderAiReviewSection = () => {
     const populatedInterviewGroups = interviewQuestionGroups.filter(
       (group) => group.interviewQuestions.length > 0
     );
+    const secretPromptLines =
+      typeof draft.aiInterviewSecretPrompt === "string"
+        ? draft.aiInterviewSecretPrompt
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter((line) => line.length > 0)
+        : [];
+    const screeningDescription = renderScreeningDescription(draft.screeningSetting);
+    const requireVideoLabel = requireVideoSetting ? "Yes" : "No";
+    let runningQuestionIndex = 0;
 
     return (
-      <div className={styles.reviewAccordionBody}>
-        <div className={styles.reviewSectionGroup}>
-          <h5 className={styles.reviewSectionTitle}>Interview settings</h5>
-          <dl className={styles.reviewDataGrid}>
-            <div className={styles.reviewDataItem}>
-              <dt>Require video on interview</dt>
-              <dd>{requireVideoSetting ? "Yes" : "No"}</dd>
+      <div className={classNames(styles.reviewAccordionBody, styles.reviewAiBody)}>
+        <div className={styles.reviewAiCard}>
+          <div className={styles.reviewAiHeader}>
+            <div className={styles.reviewAiHeaderText}>
+              <p className={styles.reviewAiTitle}>AI Interview Screening</p>
+              <p className={styles.reviewAiDescription}>{screeningDescription}</p>
             </div>
-            <div className={styles.reviewDataItem}>
-              <dt>Total interview questions</dt>
-              <dd>{totalInterviewQuestionCount}</dd>
+            <button
+              type="button"
+              className={styles.reviewAiEditButton}
+              onClick={() => setActiveStep("ai-setup")}
+              aria-label="Edit AI interview setup"
+            >
+              <i className="la la-pen"></i>
+            </button>
+          </div>
+
+          <div className={styles.reviewAiMetaRow}>
+            <div className={styles.reviewAiMetaItem}>
+              <span className={styles.reviewAiMetaLabel}>Require Video on Interview</span>
+              <span className={styles.reviewAiMetaValue}>
+                {requireVideoLabel}
+                {requireVideoSetting && (
+                  <span className={styles.reviewAiMetaIcon} aria-hidden="true">
+                    <i className="la la-check"></i>
+                  </span>
+                )}
+              </span>
             </div>
-          </dl>
-        </div>
-        <div className={styles.reviewSectionGroup}>
-          <h5 className={styles.reviewSectionTitle}>Interview secret prompt</h5>
-          {draft.aiInterviewSecretPrompt ? (
-            <div className={styles.reviewPromptBox}>{draft.aiInterviewSecretPrompt}</div>
-          ) : (
-            <p className={styles.reviewEmptyState}>No secret prompt provided.</p>
-          )}
-        </div>
-        <div className={styles.reviewSectionGroup}>
-          <h5 className={styles.reviewSectionTitle}>Interview question bank</h5>
-          {populatedInterviewGroups.length ? (
-            <div className={styles.reviewQuestionGroups}>
-              {populatedInterviewGroups.map((group) => (
-                <div key={group.id} className={styles.reviewQuestionGroup}>
-                  <div className={styles.reviewQuestionGroupHeader}>
-                    <span>{group.category}</span>
-                    <span className={styles.reviewQuestionCount}>
-                      {formatCountLabel(
-                        group.interviewQuestions.length,
-                        "Interview question",
-                        "Interview questions"
-                      )}
-                    </span>
-                  </div>
-                  <ol className={styles.reviewQuestionList}>
-                    {group.interviewQuestions.map((question: any, index: number) => {
-                      const questionText =
-                        typeof question?.question === "string" && question.question.trim().length
-                          ? question.question.trim()
-                          : `Question ${index + 1}`;
-                      return (
-                        <li
-                          key={question?.id ?? `interview-${group.id}-${index}`}
-                          className={styles.reviewQuestionItem}
-                        >
-                          <div className={styles.reviewQuestionHeader}>
-                            <span className={styles.reviewQuestionText}>
-                              {index + 1}. {questionText}
-                            </span>
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ol>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className={styles.reviewEmptyState}>No interview questions configured.</p>
-          )}
+          </div>
+
+          <div className={styles.reviewAiDivider} aria-hidden="true"></div>
+
+          <section className={styles.reviewAiSection}>
+            <header className={styles.reviewAiSectionHeader}>
+              <div className={styles.reviewAiSectionTitleGroup}>
+                <span className={styles.reviewAiSectionIcon} aria-hidden="true">
+                  ✨
+                </span>
+                <span className={styles.reviewAiSectionTitle}>AI Interview Secret Prompt</span>
+              </div>
+            </header>
+            {secretPromptLines.length ? (
+              <ul className={styles.reviewAiPromptList}>
+                {secretPromptLines.map((line, index) => (
+                  <li key={`ai-secret-prompt-${index}`}>{line}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className={styles.reviewAiEmpty}>No secret prompt provided.</p>
+            )}
+          </section>
+
+          <div className={styles.reviewAiDivider} aria-hidden="true"></div>
+
+          <section className={styles.reviewAiSection}>
+            <header className={styles.reviewAiSectionHeader}>
+              <span className={styles.reviewAiSectionTitle}>Interview Questions</span>
+              <span className={styles.reviewAiCountBadge}>{totalInterviewQuestionCount}</span>
+            </header>
+            {populatedInterviewGroups.length ? (
+              <div className={styles.reviewAiQuestionGroups}>
+                {populatedInterviewGroups.map((group) => {
+                  if (!group.interviewQuestions.length) {
+                    return null;
+                  }
+                  const startIndex = runningQuestionIndex + 1;
+                  runningQuestionIndex += group.interviewQuestions.length;
+
+                  return (
+                    <div key={group.id} className={styles.reviewAiQuestionGroup}>
+                      <div className={styles.reviewAiQuestionGroupHeader}>
+                        <span className={styles.reviewAiQuestionCategory}>
+                          {group.category || "Interview Questions"}
+                        </span>
+                      </div>
+                      <ol className={styles.reviewAiQuestionList} start={startIndex}>
+                        {group.interviewQuestions.map((question: any, index: number) => {
+                          const questionText =
+                            typeof question?.question === "string" && question.question.trim().length
+                              ? question.question.trim()
+                              : `Question ${startIndex + index}`;
+                          return (
+                            <li
+                              key={question?.id ?? `interview-${group.id}-${index}`}
+                              className={styles.reviewAiQuestion}
+                            >
+                              <span className={styles.reviewAiQuestionText}>{questionText}</span>
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className={styles.reviewAiEmpty}>No interview questions configured.</p>
+            )}
+          </section>
         </div>
       </div>
     );
@@ -3062,8 +3214,8 @@ export default function SegmentedCareerForm({
               disabled={isSavingCareer}
               onClick={() => confirmSaveCareer("active")}
             >
-              Save and Continue
-              <i className="la la-arrow-right"></i>
+              {isOnReviewStep ? "Publish" : "Save and Continue"}
+              {!isOnReviewStep && <i className="la la-arrow-right"></i>}
             </button>
           </div>
         </div>
@@ -3085,6 +3237,7 @@ export default function SegmentedCareerForm({
                 showCvScreeningValidation &&
                 !isStepComplete("cv-screening")) ||
               (step.id === "ai-setup" && showAiQuestionValidation && totalInterviewQuestionCount < 5);
+            const isReviewStepper = step.id === "review";
             
             let stepProgressWidth = 0;
             if (isCompleted) {
@@ -3120,10 +3273,12 @@ export default function SegmentedCareerForm({
                       <span className={styles.stepDot} aria-hidden="true" />
                     )}
                   </span>
-                  <div 
-                    className={styles.stepProgress}
-                    style={{ "--step-progress": `${stepProgressWidth}%`, margin: 0 } as CSSProperties}
-                  />
+                  {!isReviewStepper && (
+                    <div
+                      className={styles.stepProgress}
+                      style={{ "--step-progress": `${stepProgressWidth}%`, margin: 0 } as CSSProperties}
+                    />
+                  )}
                 </div>
                 <span
                   className={classNames(styles.stepLabel, {
@@ -4898,38 +5053,15 @@ export default function SegmentedCareerForm({
                   );
                 })}
               </div>
-              <div className={styles.reviewFooterCard}>
-                <footer className={classNames(styles.stepFooter, styles.reviewFooter)}>
-                  <button className={styles.backButton} onClick={goToPreviousStep}>
-                    <i className="la la-arrow-left"></i>
-                    Back
-                  </button>
-                  <div style={{ display: "flex", gap: 12 }}>
-                    <button
-                      className={styles.nextButton}
-                      disabled={!isFormValid}
-                      onClick={() => confirmSaveCareer("inactive")}
-                    >
-                      Save as Unpublished
-                    </button>
-                    <button
-                      className={styles.nextButton}
-                      disabled={!isFormValid}
-                      onClick={() => confirmSaveCareer("active")}
-                    >
-                      Save and Publish
-                    </button>
-                  </div>
-                </footer>
-              </div>
             </div>
           )}
         </div>
 
-        <aside className={styles.secondaryColumn}>
-          <div className={styles.tipsCard}>
-            <div className={styles.tipsHeader}>
-              <span className={styles.tipsBadge} aria-hidden="true">
+        {activeStep !== "review" && (
+          <aside className={styles.secondaryColumn}>
+            <div className={styles.tipsCard}>
+              <div className={styles.tipsHeader}>
+                <span className={styles.tipsBadge} aria-hidden="true">
                 <svg
                   className={styles.tipsIcon}
                   viewBox="0 0 48 48"
@@ -4998,21 +5130,22 @@ export default function SegmentedCareerForm({
                     fillOpacity="0.75"
                   />
                 </svg>
-              </span>
-              <span className={styles.tipsTitle}>Tips</span>
+                </span>
+                <span className={styles.tipsTitle}>Tips</span>
+              </div>
+              <div className={styles.tipsBody}>
+                <ul className={styles.tipsList}>
+                  {tipsContent.map((tip) => (
+                    <li key={tip.heading}>
+                      <strong>{tip.heading}</strong>
+                      <span>{tip.body}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
-            <div className={styles.tipsBody}>
-              <ul className={styles.tipsList}>
-                {tipsContent.map((tip) => (
-                  <li key={tip.heading}>
-                    <strong>{tip.heading}</strong>
-                    <span>{tip.body}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </aside>
+          </aside>
+        )}
       </div>
 
       {questionModalState.action && questionModalState.groupId !== null && (

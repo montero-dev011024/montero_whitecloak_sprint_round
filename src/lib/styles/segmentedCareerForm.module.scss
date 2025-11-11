@@ -1570,8 +1570,8 @@
 }
 
 .reviewAccordionItemOpen {
-  border-color: rgba(79, 70, 229, 0.4);
-  box-shadow: 0 12px 28px rgba(79, 70, 229, 0.16);
+  border-color: rgba(15, 23, 42, 0.18);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
   transform: translateY(-2px);
 }
 
@@ -1592,10 +1592,18 @@
   background: rgba(248, 250, 252, 0.85);
 }
 
-.reviewAccordionHeader:focus-visible {
-  outline: 3px solid rgba(79, 70, 229, 0.25);
-  outline-offset: 2px;
+
+.reviewAccordionHeader:focus {
+  outline: none;
+  box-shadow: none;
 }
+
+.reviewAccordionHeader:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+
 
 .reviewAccordionHeaderOpen {
   background: rgba(248, 250, 252, 0.95);
@@ -1618,7 +1626,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #6366f1;
+  color: #64748b;
 }
 
 .reviewAccordionHeaderRight {
@@ -1638,11 +1646,11 @@
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: rgba(79, 70, 229, 0.1);
+  background: rgba(148, 163, 184, 0.18);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #4f46e5;
+  color: #1f2937;
   font-size: 16px;
 }
 
@@ -1681,6 +1689,10 @@
   gap: 16px;
 }
 
+.reviewSectionFlush {
+  gap: 0;
+}
+
 .reviewSectionTitle {
   font-size: 13px;
   font-weight: 700;
@@ -1688,6 +1700,62 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
   margin: 0;
+}
+
+.reviewDataTable {
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 16px;
+  overflow: hidden;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+.reviewDataRow {
+  display: grid;
+  gap: 16px;
+  padding: 18px 24px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+}
+
+.reviewDataRow:last-child {
+  border-bottom: none;
+}
+
+.reviewDataRow[data-columns="1"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.reviewDataRow[data-columns="2"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.reviewDataRow[data-columns="3"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.reviewDataCell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.reviewDataLabel {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.reviewDataValue {
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.reviewDataCellEmphasis .reviewDataValue {
+  font-size: 18px;
+  font-weight: 700;
 }
 
 .reviewDataGrid {
@@ -1749,10 +1817,54 @@
   line-height: 1.5;
 }
 
+.reviewRichTextFramed {
+  border-radius: 16px;
+  padding: 24px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
 .reviewEmptyState {
   margin: 0;
   font-size: 14px;
   color: #94a3b8;
+}
+
+.reviewTeamTable {
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 16px;
+  overflow: hidden;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+  display: flex;
+  flex-direction: column;
+}
+
+.reviewTeamRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 24px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+}
+
+.reviewTeamRow:last-child {
+  border-bottom: none;
+}
+
+.reviewTeamPrimary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.reviewTeamIdentity {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
 }
 
 .reviewTeamList {
@@ -1807,7 +1919,7 @@
 .reviewTeamName {
   font-size: 14px;
   font-weight: 700;
-  color: #111827;
+  color: #0f172a;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1822,11 +1934,9 @@
 }
 
 .reviewTeamRole {
-  font-size: 12px;
-  font-weight: 700;
-  color: #4f46e5;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
 }
 
 .reviewQuestionGroups {
@@ -1877,6 +1987,433 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.reviewCvBody {
+  background: #fdfdff;
+}
+
+.reviewCvCard {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  border-radius: 20px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: #f8faff;
+  padding: 24px;
+  box-shadow: 0 8px 26px rgba(15, 23, 42, 0.08);
+}
+
+.reviewCvHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.reviewCvHeaderText {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.reviewCvTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.reviewCvDescription {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #475569;
+}
+
+.reviewCvBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  min-width: 70px;
+  height: 26px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.12);
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.reviewCvEditButton {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  background: rgba(148, 163, 184, 0.2);
+  color: #475569;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.reviewCvEditButton:hover {
+  background: rgba(148, 163, 184, 0.28);
+  color: #111827;
+}
+
+.reviewCvEditButton:focus {
+  outline: none;
+}
+
+.reviewCvEditButton:focus-visible {
+  outline: 2px solid rgba(30, 64, 175, 0.35);
+  outline-offset: 2px;
+}
+
+.reviewCvDivider {
+  width: 100%;
+  height: 1px;
+  border: none;
+  background: linear-gradient(90deg, rgba(148, 163, 184, 0), rgba(148, 163, 184, 0.4), rgba(148, 163, 184, 0));
+}
+
+.reviewCvSection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.reviewCvSectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.reviewCvSectionTitleGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reviewCvSectionIcon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.reviewCvSectionTitle {
+  font-size: 15px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.reviewCvCountBadge {
+  min-width: 28px;
+  height: 24px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1e293b;
+  padding: 0 10px;
+}
+
+.reviewCvPromptList {
+  margin: 0;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #475569;
+}
+
+.reviewCvEmpty {
+  margin: 0;
+  font-size: 14px;
+  color: #94a3b8;
+}
+
+.reviewCvQuestionList {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  font-size: 14px;
+  color: #111827;
+  list-style-position: outside;
+}
+
+.reviewCvQuestion {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.reviewCvQuestionText {
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.reviewCvOptionList {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  color: #475569;
+}
+
+.reviewCvQuestionMeta {
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.reviewAiBody {
+  background: #fdfdff;
+}
+
+.reviewAiCard {
+  @extend .reviewCvCard;
+}
+
+.reviewAiHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.reviewAiHeaderText {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.reviewAiTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.reviewAiDescription {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #475569;
+}
+
+.reviewAiEditButton {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  background: rgba(148, 163, 184, 0.2);
+  color: #475569;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.reviewAiEditButton:hover {
+  background: rgba(148, 163, 184, 0.28);
+  color: #111827;
+}
+
+.reviewAiEditButton:focus {
+  outline: none;
+}
+
+.reviewAiEditButton:focus-visible {
+  outline: 2px solid rgba(30, 64, 175, 0.35);
+  outline-offset: 2px;
+}
+
+.reviewAiMetaRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  align-items: center;
+}
+
+.reviewAiMetaItem {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.reviewAiMetaLabel {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+}
+
+.reviewAiMetaValue {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.reviewAiMetaIcon {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(34, 197, 94, 0.16);
+  color: #047857;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+
+.reviewAiMetaBadge {
+  min-width: 32px;
+  height: 28px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+  padding: 0 12px;
+}
+
+.reviewAiDivider {
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(148, 163, 184, 0), rgba(148, 163, 184, 0.4), rgba(148, 163, 184, 0));
+}
+
+.reviewAiSection {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.reviewAiSectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.reviewAiSectionTitleGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reviewAiSectionIcon {
+  font-size: 16px;
+}
+
+.reviewAiSectionTitle {
+  font-size: 15px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.reviewAiPromptList {
+  margin: 0;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #475569;
+}
+
+.reviewAiEmpty {
+  margin: 0;
+  font-size: 14px;
+  color: #94a3b8;
+}
+
+.reviewAiCountBadge {
+  min-width: 28px;
+  height: 24px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1e293b;
+  padding: 0 10px;
+}
+
+.reviewAiQuestionGroups {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.reviewAiQuestionGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.reviewAiQuestionGroupHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.reviewAiQuestionCategory {
+  font-size: 14px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.reviewAiQuestionList {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 14px;
+  color: #111827;
+  list-style-position: outside;
+}
+
+.reviewAiQuestion {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.reviewAiQuestionText {
+  font-weight: 600;
+  line-height: 1.6;
 }
 
 .reviewQuestionHeader {
@@ -2046,5 +2583,26 @@
   .aiQuestionCounterGroup {
     width: 100%;
     justify-content: space-between;
+  }
+
+  .reviewDataRow,
+  .reviewDataRow[data-columns="2"],
+  .reviewDataRow[data-columns="3"] {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 16px 18px;
+  }
+
+  .reviewTeamRow {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .reviewTeamIdentity {
+    width: 100%;
+  }
+
+  .reviewTeamRole {
+    align-self: flex-start;
   }
 }
