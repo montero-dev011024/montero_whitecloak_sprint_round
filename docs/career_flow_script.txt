@@ -1,0 +1,361 @@
+Overview
+
+This document is a comprehensive script and demo dialogue explaining the recent feature work to the "Add New Career" flow, the security hardening of the Add Career API, and the addition of pre-screening questions. Use this as a demo script for stakeholders, a handoff note for other developers, or as a narrative to include in a PR description.
+
+High-level goals covered
+
+- Enhance the "Add New Career" flow to be a segmented (multi-step) form with save/resume support.
+- Secure the `POST /api/add-career` endpoint against XSS, invalid HTML and malformed input.
+- Add support for creating, editing, and persisting pre-screening (pre-interview) questions as part of career posts.
+
+Files touched (representative)
+
+- src/lib/components/CareerComponents/SegmentedCareerForm.tsx
+  - Implements the segmented wizard UI, navigation helpers, step completeness checks, save/resume, and flow control for Save & Continue.
+- src/lib/utils/sanitize.ts
+  - Centralized sanitization utilities: sanitizePlainText, sanitizeRichText, sanitizeUrl, sanitizeEmail, sanitizeQuestionGroupsInput, sanitizeTeamMembersInput, and numeric helpers.
+- src/app/api/add-career/route.ts
+  - The API route that receives career creation payloads. Now applies sanitization, validation, and safe persistence of fields.
+
+Presentation contract (2–4 bullets)
+
+- Inputs: recruiter-provided career data (title, description, salary range, location, team members, pre-screening question groups, CV review settings, AI settings, etc.).
+- Output: saved career document in the `careers` collection / persisted draft and (when published) a validated, sanitized career entry.
+- Error modes: return 4xx with descriptive messages when payload fails validation or sanitization; return 5xx on unexpected server errors.
+- Success: career draft saved or career published; when publishing, required fields enforced at review/publish time.
+
+Edge cases covered
+
+- Empty or missing optional fields (CV Review fields are optional: the UI still navigates to the CV-review step but does not force data there).
+- Untrusted HTML or script injection in rich text fields (sanitized to safe subset of tags/attributes).
+- Numeric boundaries (salary ranges min/max and validation that min <= max).
+- Duplicate or malformed team member entries (member ids normalized and deduped).
+- Invalid ObjectId strings for org references (rejected early with a clear message).
+
+Developer summary (what I changed)
+
+1) Segmented form UI
+
+- Reworked the recruiter "Add Career" page to be a multi-step wizard. Each step has its own small form segment. Steps include:
+  1. career-details
+  2. cv-screening
+  3. ai-setup
+  4. pipeline
+  5. review
+
+- The UI allows saving a draft at any time. Drafts are persisted in localStorage (and optionally to the server on explicit Save). When the user returns, the last active step is restored.
+
+- Important logic change: `confirmSaveCareer` was refactored so that it no longer validates and jumps to the first incomplete step while the user is mid-flow; instead it uses sequential navigation in most cases. Full validation runs at the final review/publish step.
+
+2) Sanitization & validation utilities
+
+- Created `src/lib/utils/sanitize.ts` which centralizes sanitization rules for plain text and rich text and also validates and normalizes common shapes:
+  - sanitizePlainText: removes HTML, trims, truncates, preserves line breaks optionally.
+  - sanitizeRichText: uses `sanitize-html` with a safe subset of tags/attributes, transforms anchor tags to safe hrefs, enforces rel/target attributes.
+  - sanitizeUrl: safe URL parsing and protocol enforcement (http/https only for links; mailto/tel allowed for anchors).
+  - sanitizeEmail: plain-text cleaning + regex validation.
+  - sanitizeCurrencyCode: uppercase 3-letter currency check.
+  - sanitizeNumericInput: robust numeric parsing with min/max constraints.
+  - sanitizeTeamMembersInput: dedupes, validates memberId, name,email,image,role.
+  - sanitizeQuestionGroupsInput & sanitizeQuestionGroup: accepts an array of question group objects and sanitizes questions/options/ranges/follow-ups recursively.
+
+3) API hardening
+
+- The `POST /api/add-career` handler now:
+  - Runs the entire incoming payload through sanitizers and validators before any DB operation.
+  - Validates org ID string is a valid ObjectId and enforces tenant-level limits (if applicable).
+  - Validates salary ranges and normalizes numbers.
+  - Ensures question groups are well-formed arrays and that question text is sanitized.
+  - Rejects payloads with clear messages when required sanitized fields are missing or inconsistent (for example when publishing and required fields are empty after sanitization).
+
+Why this design
+
+- Centralized sanitization avoids scattered selector logic and ensures every API path that wants to persist user-supplied content can reuse the same rules.
+- Keeping CV Review optional in terms of validation but still reachable in the wizard preserves UX (users aren't forced to enter optional metadata) while ensuring the page is shown during flow.
+- Full validation happens at the review/publish action to avoid noisy validation while the user is actively editing multiple steps.
+
+Security notes
+
+- `sanitize-html` is used for rich text. Anchor `href` attributes are parsed and only http/https/mailto/tel are allowed; anchors are rewritten to add rel="noopener noreferrer" and target="_blank".
+- All input strings are passed through `sanitizePlainText` or `sanitizeRichText` depending on expected shape.
+- Email and URLs validated with dedicated helpers.
+- All sanitized results are used for DB writes; any field that becomes empty after sanitization is treated as absent.
+
+How to demo (script + dialogue)
+
+- Scenario: Recruiter "Alex" creates a new career post and tests save/resume, adds pre-screening questions, and then publishes.
+
+Roles in the demo
+
+- Presenter: explains what’s happening.
+- Recruiter (Alex): acts as the user creating a career.
+- Reviewer/Stakeholder (Sam): asks a few questions during the demo.
+
+Scripted dialogue
+
+[Slide 1 — Intro]
+Presenter: "I’ll show the new segmented career creation flow, explain how we secure rich content on the backend, and demonstrate adding pre-screening questions."
+
+[Slide 2 — Start flow]
+Presenter: "Alex clicks 'Add New Career', fills in the basic details." 
+Alex: "I’ll add Title: 'Senior Frontend Engineer' and a short location and salary range."
+Presenter: "You can click 'Save & Continue' to move to the next step. This preserves your progress to local draft." 
+
+Alex: (clicks Save & Continue) "I have not filled the CV-Review section yet."
+Presenter: "That’s OK — the CV Review step is optional. You will still be navigated to the CV Review page, so recruiters can optionally add CV review settings or skip it and move forward." 
+
+[Slide 3 — CV Review demonstration]
+Alex: "I’ll open CV Review — here you can set a description, toggle whether CVs are required, and add pre-screening questions."
+Presenter: "Note: the UI accepts rich text, but we sanitize everything on the server before saving to the DB to prevent XSS."
+
+Alex: "I will add a sample question: 'Please describe your experience with React.' and an optional follow up." 
+Presenter: "Save & Continue moves you to AI setup." 
+
+[Slide 4 — Pre-screening questions]
+Presenter: "Let me show adding, editing, and reordering pre-screening question groups."
+Alex: "I’ll add a group 'Technical' with 3 questions and set the questionCountToAsk to 2."
+Presenter: "The question groups are validated and sanitized on the client and then sanitized again on the server before persistence. Complex question objects (options, ranges, follow-ups) are recursively sanitized." 
+
+[Slide 5 — Publish flow & validation]
+Presenter: "When you reach Review and click 'Publish' the server runs final checks and will reject the publish if critical fields (like title or description, depending on org rules) are missing after sanitization, or if salary min > salary max. Otherwise the sanitized career is stored." 
+
+Sam (Reviewer): "What if someone tries to paste a script or malformed HTML into the job description?"
+Presenter: "The description is passed through `sanitizeRichText` with a whitelist of safe tags. Scripts and event attributes are stripped. Links are normalized and anchored to open safely." 
+
+[Slide 6 — Show logs / API request]
+Presenter: "Here is an example sanitized payload that the server will persist (shortened):"
+
+```json
+{
+  "title":"Senior Frontend Engineer",
+  "description":"<p>Build UIs with React.</p>",
+  "minimumSalary":60000,
+  "maximumSalary":120000,
+  "currency":"USD",
+  "preScreeningQuestions":[
+    {
+      "id":1,
+      "category":"Technical",
+      "questionCountToAsk":2,
+      "questions":[{"question":"Please describe your React experience."}]
+    }
+  ]
+}
+```
+
+Presenter: "If a malicious payload like `<script>alert(1)</script>` is included in the description it is removed by `sanitizeRichText` before persistence." 
+
+QA checklist and test cases (basic)
+
+1. Save/Resume behavior
+  - Fill step 1, click Save & Continue. Close window and reopen; verify the form resumes at the last step and data is restored from localStorage or saved draft.
+
+2. Optional CV Review
+  - From step 1, click Save & Continue and confirm user lands on CV Review step even when no CV Review data is provided.
+
+3. Pre-screening questions
+  - Add multiple question groups, reorder, set `questionCountToAsk`, add follow-ups/options; save and confirm the server persisted sanitized text and options.
+
+4. XSS attempts
+  - Submit a career description containing `<script>` tags, `onerror` attributes, or malicious `javascript:` links. Verify API returns success but stored description has those elements removed.
+
+5. Salary validation
+  - Attempt to publish with minimumSalary > maximumSalary. Expect a 4xx error and friendly message.
+
+6. Invalid orgId or missing required fields on publish
+  - Expect descriptive 4xx errors from API.
+
+Commands for local dev & testing
+
+# Start dev server
+# (run from repo root)
+
+```bash
+npm run dev
+```
+
+# Example curl test for XSS payload (adjust port/path as needed)
+
+```bash
+curl -X POST 'http://localhost:3000/api/add-career' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "title":"Test XSS",
+    "description":"<p>Legit</p><script>alert(1)</script>",
+    "minimumSalary":50000,
+    "maximumSalary":80000,
+    "currency":"USD",
+    "orgId":"<REPLACE_WITH_VALID_OBJECTID>"
+  }'
+```
+
+Expected: API returns success and stored `description` contains only the `<p>Legit</p>` portion; `<script>` removed.
+
+Developer notes and follow-ups
+
+- Consider adding server-side rate-limits or request-size caps for the API to mitigate large payload abuse.
+- Add integration tests that assert sanitization behavior (unit tests for `sanitize.ts` and API tests that POST crafted payloads and check persisted database documents).
+- Optionally move some sanitization to a shared middleware if multiple API routes need the same protections.
+- For rich text, if product needs more formatting features (tables, code blocks), expand `RICH_TEXT_ALLOWED_TAGS` carefully and re-run tests.
+
+Suggested PR description (short)
+
+"Add segmented career creation wizard with save/resume, pre-screening questions, and server-side sanitization to protect against XSS. Introduce centralized sanitization utilities and hardened `POST /api/add-career` route."
+
+Commit message (one-liner)
+
+feat(api/ui): segmented career form + save/resume, sanitize add-career inputs, add pre-screening questions
+
+Closing summary
+
+This file explains the user-flow changes, the security hardening, and the developer details required for review and QA. It includes a demo script and commands to run quick checks locally. If you want, I can also:
+
+- Add unit tests for `src/lib/utils/sanitize.ts` (happy path + malicious payloads),
+- Add an integration test suite that spins up a local test DB and POSTs sample career payloads,
+- Create a short video walkthrough recording the UI flow.
+
+If you'd like any of those, tell me which and I will prepare them next.
+
+Expanded technical appendix & deep-dive
+
+This section expands on implementation details, data models, sanitization rules, runtime behaviour, and debugging guidance. Include this in architecture docs or attach to the PR for reviewers who want the technical rationale.
+
+1) Data shapes and examples
+
+- Career (persisted document - cleaned/sanitized):
+
+  {
+    "_id": "ObjectId",
+    "title": "Senior Frontend Engineer",
+    "slug": "senior-frontend-engineer",
+    "description": "<p>Build accessible UIs using React.</p>",
+    "location": { "city":"Manila", "country":"PH" },
+    "minimumSalary": 60000,
+    "maximumSalary": 120000,
+    "currency": "PHP",
+    "status": "draft|active|inactive",
+    "orgId": "ObjectId",
+    "teamMembers": [ { "memberId":"ObjectId","name":"Jane","email":"jane@example.com","role":"recruiter" } ],
+    "cvReview": { "enabled": true, "description":"Short notes for reviewers" },
+    "preScreeningQuestions": [
+      {
+        "id": "uuid-or-number",
+        "title": "Technical",
+        "questionCountToAsk": 2,
+        "questions": [ { "id":"q1","question":"Describe React experience" } ]
+      }
+    ],
+    "aiSetup": { /* sanitized ai prompt config */ },
+    "pipeline": { /* stage/order */ },
+    "createdAt": "ISODate",
+    "updatedAt": "ISODate"
+  }
+
+2) Sanitization rules (engineered decisions)
+
+- Plain text fields (title, short labels, tags)
+  - Operation: strip HTML tags, collapse whitespace, trim to max length (e.g., 255), normalize unicode.
+  - Why: Titles are commonly used in UI and must not contain markup.
+
+- Rich text fields (description, job responsibilities)
+  - Operation: run through `sanitize-html` with an allowlist of tags (p, br, ul, ol, li, strong, em, a, code, pre, h1-h3, img optional), allowed attributes per tag (href for a, src/alt for img), enforce `rel` and `target` on anchors, strip event handler attributes and style attributes.
+  - Link normalization: allow only http/https/mailto/tel; reject `javascript:` and data URIs for anchors unless explicitly required and sanitized.
+  - Why: preserve formatting but remove XSS vectors.
+
+- URLs and emails
+  - Operation: use URL parse+protocol check for links; regex + normalization for emails.
+  - Reject or nullify links with unsupported protocols.
+
+- Numeric fields (salary)
+  - Operation: parse to integers/floats, clamp if max/min bounds exist, error if min > max.
+
+- Arrays/Objects (team members, question groups)
+  - Operation: validate type is array; for each entry sanitize string fields; verify IDs are valid ObjectId strings or known formats; dedupe by memberId or normalized email.
+
+3) Where sanitization happens
+
+- Client: lightweight validation (required fields, shape) and UX helpers. The client does not trust sanitization as final — it helps provide instant feedback.
+- Server (authoritative): every inbound field is sanitized and validated before any DB write. The API returns errors if critical constraints fail after sanitization (e.g., publishing with empty title after sanitization).
+
+4) Flow control & UX specifics
+
+- Segmented form behaviour:
+  - Each step is responsible for validating only its local inputs for local UX hints.
+  - Save & Continue performs a sequential step transition (call to `goToNextStep()`), which persists the current draft and switches the visible step. It does not try to validate unrelated future steps.
+  - The final Publish action runs the authoritative validations (server + client) and surfaces any missing required fields.
+
+- CV Review step
+  - CV Review is optional by design. Recruiters can skip adding CV rules but must still pass through the page when using Save & Continue to ensure they can optionally review or add settings.
+  - Implementation approach: `isStepComplete('cv-screening')` is intentionally permissive; navigation is sequential to guarantee the page is shown.
+
+5) Debugging guidance (common issues & fixes)
+
+- "Saved draft not restored"
+  - Check localStorage key naming in `useLocalStorage`. Confirm serialization (JSON stringify/parse) and that saved object includes `activeStep` and `draftPayload`.
+
+- "Step is skipped on Save & Continue"
+  - Root cause: `confirmSaveCareer` was validating future steps out-of-order. Fix: keep `goToNextStep()` for sequential navigation and run full validation only at publish.
+
+- "Malicious markup persisted"
+  - Confirm `sanitizeRichText` is applied both in API layer and before DB insertion. Add log statements in API to output length and example snippet of sanitized content for debugging. Add unit tests that assert sanitized result does not contain `<script>`.
+
+6) Acceptance criteria (for QA)
+
+- Functionality:
+  - A recruiter can fill step 1 and click Save & Continue — the UI moves to step 2 (CV Review) even if CV Review is empty.
+  - A recruiter can save a draft from any step and resume later at the same step.
+  - Pre-screening questions can be added/edited/reordered and persist correctly.
+
+- Security:
+  - Submitting a payload with `<script>`, `onerror`, `javascript:` links is stored without those vectors and does not execute in the browser when loaded.
+
+- Validation:
+  - Publishing requires critical fields; server returns descriptive 4xx responses for missing/invalid fields.
+
+7) Example test payloads
+
+- Safe payload (expected to persist):
+
+  {
+    "title":"Backend Engineer",
+    "description":"<p>Work with Node.js and Postgres.</p>",
+    "minimumSalary":40000,
+    "maximumSalary":70000,
+    "currency":"PHP",
+    "orgId":"<VALID_OBJECTID>"
+  }
+
+- Malicious payload (expected to be sanitized):
+
+  {
+    "title":"<img src=x onerror=alert(1)>",
+    "description":"<p>Hi</p><script>alert('xss')</script><a href=\"javascript:alert(1)\">bad link</a>",
+    "orgId":"<VALID_OBJECTID>"
+  }
+
+  Expected sanitized result: `title` becomes empty/trimmed or rejected if empty on publish; `description` becomes `<p>Hi</p><a rel=\"noopener noreferrer\" target=\"_blank\">bad link</a>` only if link sanitized/allowed else removed.
+
+8) Rollback & emergency mitigation
+
+- If a sanitization regression is detected in production (rare but possible), feature-flag the endpoint behind an environment variable so you can toggle to a fallback safe behavior (e.g., strip ALL HTML instead of sanitized subset) while an investigation occurs.
+
+9) Performance considerations
+
+- Sanitization is CPU-bound for very large content. Add request-size limits (e.g., 200 KB) and consider offloading heavy processing to background jobs if recruiters need to paste extremely large documents.
+
+10) Next steps & recommended improvements
+
+- Add unit tests for `src/lib/utils/sanitize.ts` covering the happy and malicious paths.
+- Add an integration test suite for `POST /api/add-career` that runs against a test database and ensures persisted documents have expected shapes.
+- Add monitoring/alerts for 4xx spikes for the add-career endpoint to detect potential misuse or UX issues.
+
+Appendix: Short checklist to include in PR description
+
+- [ ] UI: segmented form implemented and sequential navigation confirmed
+- [ ] UX: save/resume works and localStorage key naming consistent
+- [ ] Security: all rich text fields sanitized on server
+- [ ] Validation: publish validates salary bounds and required fields
+- [ ] Tests: unit tests for sanitizers added (if not, plan created)
+- [ ] Docs: this `docs/career_flow_script.txt` attached to the PR for reviewer context
+
+-- End of document --
