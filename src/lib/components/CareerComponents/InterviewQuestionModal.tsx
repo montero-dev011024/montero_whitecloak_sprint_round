@@ -1,7 +1,22 @@
 "use client";
 import { useState } from "react";
 
-export default function InterviewQuestionModal({ groupId, questionToEdit, action, onAction }: { groupId: number, questionToEdit?: { id: number, question: string }, action: string, onAction: (action: string, groupId?: number, question?: string, questionId?: number) => void }) {
+export default function InterviewQuestionModal({
+    groupId,
+    questionToEdit,
+    action,
+    onAction,
+}: {
+    groupId: number;
+    questionToEdit?: { id: string | number; question: string };
+    action: string;
+    onAction: (
+        action: string,
+        groupId?: number,
+        question?: string,
+        questionId?: string | number
+    ) => void;
+}) {
     const [question, setQuestion] = useState(questionToEdit?.question || "");
 
     const actions = {

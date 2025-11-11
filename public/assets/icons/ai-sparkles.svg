@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="28" height="32" viewBox="0 0 28 32" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-hidden="true">
+  <defs>
+    <linearGradient id="g1" x1="0" y1="0" x2="28" y2="32" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FBCFE8"/>
+      <stop offset="0.55" stop-color="#C4B5FD"/>
+      <stop offset="1" stop-color="#A5F3FC"/>
+    </linearGradient>
+    <linearGradient id="g2" x1="0" y1="0" x2="14" y2="16" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C7D2FE"/>
+      <stop offset="1" stop-color="#E9D5FF"/>
+    </linearGradient>
+  </defs>
+  <!-- Large sparkle -->
+  <path d="M14 2 C13 7 11 9 6 10 C11 11 13 13 14 18 C15 13 17 11 22 10 C17 9 15 7 14 2 Z" fill="url(#g1)"/>
+  <!-- Medium sparkle -->
+  <path d="M22.5 12.5 C22 14.8 21 15.8 18.7 16.3 C21 16.8 22 17.8 22.5 20.1 C23 17.8 24 16.8 26.3 16.3 C24 15.8 23 14.8 22.5 12.5 Z" fill="url(#g2)"/>
+  <!-- Small sparkle -->
+  <path d="M7 18 C6.7 19.5 6 20.2 4.5 20.5 C6 20.8 6.7 21.5 7 23 C7.3 21.5 8 20.8 9.5 20.5 C8 20.2 7.3 19.5 7 18 Z" fill="url(#g1)"/>
+</svg>

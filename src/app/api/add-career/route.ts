@@ -26,6 +26,7 @@ export async function POST(request: Request) {
       salaryCurrency,
       teamMembers,
       cvSecretPrompt,
+      aiInterviewSecretPrompt,
     } = await request.json();
     // Validate required fields
     if (!jobTitle || !description || !questions || !location || !workSetup) {
@@ -82,7 +83,7 @@ export async function POST(request: Request) {
 
     const normalizedTeamMembers = Array.isArray(teamMembers) ? teamMembers : [];
 
-  const career = {
+    const career = {
       id: guid(),
       jobTitle,
       description,
@@ -90,7 +91,8 @@ export async function POST(request: Request) {
       location,
       workSetup,
       workSetupRemarks,
-  cvSecretPrompt,
+      cvSecretPrompt,
+      aiInterviewSecretPrompt,
       createdAt: new Date(),
       updatedAt: new Date(),
       lastEditedBy,

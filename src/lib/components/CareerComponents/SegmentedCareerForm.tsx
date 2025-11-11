@@ -4,6 +4,7 @@ import {
   CSSProperties,
   DragEvent,
   MutableRefObject,
+  ReactNode,
   useEffect,
   useId,
   useMemo,
@@ -14,12 +15,18 @@ import classNames from "classnames";
 import axios from "axios";
 import dynamic from "next/dynamic";
 import styles from "@/lib/styles/segmentedCareerForm.module.scss";
-import { candidateActionToast, errorToast, guid } from "@/lib/Utils";
+import {
+  candidateActionToast,
+  errorToast,
+  guid,
+  interviewQuestionCategoryMap,
+} from "@/lib/Utils";
 import { useAppContext } from "@/lib/context/AppContext";
 import CustomDropdown from "@/lib/components/CareerComponents/CustomDropdown";
 import locations from "../../../../public/philippines-locations.json";
 import CareerActionModal from "@/lib/components/CareerComponents/CareerActionModal";
 import FullScreenLoadingAnimation from "@/lib/components/CareerComponents/FullScreenLoadingAnimation";
+import InterviewQuestionModal from "@/lib/components/CareerComponents/InterviewQuestionModal";
 import useSegmentedFormState, {
   SegmentedCareerStep,
   segmentedSteps,
@@ -38,6 +45,73 @@ interface SuggestedPreScreenQuestion {
     max?: string;
   };
 }
+
+interface SecretPromptFieldProps {
+  inputId: string;
+  descriptionId: string;
+  label: string;
+  helper: string;
+  placeholder: string;
+  value: string;
+  onChange: (nextValue: string) => void;
+  withDivider?: boolean;
+  iconSrc?: string;
+  iconAlt?: string;
+}
+
+type QuestionModalAction = "" | "add" | "edit" | "delete";
+
+interface QuestionModalState {
+  action: QuestionModalAction;
+  groupId: number | null;
+  questionToEdit?: { id: string | number; question: string };
+}
+
+const SecretPromptField = ({
+  inputId,
+  descriptionId,
+  label,
+  helper,
+  placeholder,
+  value,
+  onChange,
+  withDivider = false,
+  iconSrc,
+  iconAlt,
+}: SecretPromptFieldProps) => (
+  <>
+    {withDivider && <div className={styles.aiSettingDivider} aria-hidden="true"></div>}
+    <section className={classNames(styles.aiSettingSection, styles.secretPromptSection)}>
+      <div className={styles.secretPromptHeading}>
+        <span className={classNames(styles.secretPromptGlyph, iconSrc && styles.secretPromptGlyphImage)} aria-hidden="true">
+          {iconSrc ? (
+            // Decorative image next to label; aria-hidden on wrapper keeps it non-announced
+            <img src={iconSrc} alt={iconAlt || ""} className={styles.secretPromptGlyphImg} />
+          ) : (
+            <i className="la la-sparkles"></i>
+          )}
+        </span>
+        <div className={styles.secretPromptTitleGroup}>
+          <div className={styles.secretPromptTitleRow}>
+            <h3>{label}</h3>
+            <span className={styles.optionalTag}>(optional)</span>
+            <i className="la la-question-circle" aria-hidden="true"></i>
+          </div>
+          <p id={descriptionId}>{helper}</p>
+        </div>
+      </div>
+      <textarea
+        className={styles.secretPromptInput}
+        id={inputId}
+        aria-describedby={descriptionId}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        rows={5}
+      ></textarea>
+    </section>
+  </>
+);
 
 const SUGGESTED_PRE_SCREENING_QUESTIONS: SuggestedPreScreenQuestion[] = [
   {
@@ -71,16 +145,113 @@ const PRE_SCREEN_TYPE_OPTIONS: Array<{
   { value: "range", label: "Range", icon: "la la-sliders-h" },
 ];
 
+const PRE_SCREEN_TYPE_LABEL_MAP: Record<PreScreenQuestionType, string> = PRE_SCREEN_TYPE_OPTIONS.reduce(
+  (acc, option) => {
+    acc[option.value] = option.label;
+    return acc;
+  },
+  {} as Record<PreScreenQuestionType, string>
+);
+
+const getPreScreenTypeLabel = (type: PreScreenQuestionType) =>
+  PRE_SCREEN_TYPE_LABEL_MAP[type] || PRE_SCREEN_TYPE_LABEL_MAP.short_text;
+
+const QUESTION_ORIGIN = {
+  PRE_SCREEN: "pre-screen",
+  INTERVIEW: "interview",
+} as const;
+
+type QuestionOrigin = (typeof QUESTION_ORIGIN)[keyof typeof QUESTION_ORIGIN];
+
+const resolveQuestionOrigin = (question: any): QuestionOrigin => {
+  const declaredOrigin = typeof question?.origin === "string" ? question.origin : "";
+  if (
+    declaredOrigin === QUESTION_ORIGIN.PRE_SCREEN ||
+    declaredOrigin === QUESTION_ORIGIN.INTERVIEW
+  ) {
+    return declaredOrigin;
+  }
+
+  if (
+    typeof question?.answerType === "string" ||
+    Array.isArray(question?.options) ||
+    typeof question?.rangeMin === "string" ||
+    typeof question?.rangeMax === "string"
+  ) {
+    return QUESTION_ORIGIN.PRE_SCREEN;
+  }
+
+  return QUESTION_ORIGIN.INTERVIEW;
+};
+
+const normalizeQuestionEntry = (question: any) => {
+  const origin = resolveQuestionOrigin(question);
+  const questionId =
+    question && question.id !== undefined && question.id !== null && question.id !== ""
+      ? question.id
+      : guid();
+
+  const normalized: any = {
+    ...question,
+    id: questionId,
+    origin,
+  };
+
+  if (origin === QUESTION_ORIGIN.PRE_SCREEN) {
+    normalized.answerType =
+      typeof question?.answerType === "string" ? question.answerType : "short_text";
+    normalized.options = Array.isArray(question?.options)
+      ? question.options.map((option: any) => ({ ...option }))
+      : [];
+    normalized.rangeMin = typeof question?.rangeMin === "string" ? question.rangeMin : "";
+    normalized.rangeMax = typeof question?.rangeMax === "string" ? question.rangeMax : "";
+  } else {
+    if (Array.isArray(question?.options) && question.options.length) {
+      normalized.options = question.options.map((option: any) => ({ ...option }));
+    } else {
+      delete normalized.options;
+    }
+    delete normalized.answerType;
+    delete normalized.rangeMin;
+    delete normalized.rangeMax;
+  }
+
+  if (typeof normalized.question !== "string" || normalized.question.trim().length === 0) {
+    if (typeof question?.text === "string") {
+      normalized.question = question.text;
+    } else if (typeof question?.prompt === "string") {
+      normalized.question = question.prompt;
+    }
+  }
+
+  return normalized;
+};
+
+const normalizeQuestionGroups = (groups?: QuestionGroup[]): QuestionGroup[] => {
+  const sourceGroups =
+    Array.isArray(groups) && groups.length ? groups : createDefaultQuestionGroups();
+
+  return sourceGroups.map((group) => ({
+    ...group,
+    questions: Array.isArray(group.questions)
+      ? group.questions.map((question: any) => normalizeQuestionEntry(question))
+      : [],
+  }));
+};
+
+const isPreScreenQuestion = (question: any) =>
+  resolveQuestionOrigin(question) === QUESTION_ORIGIN.PRE_SCREEN;
+
+const isInterviewQuestion = (question: any) =>
+  resolveQuestionOrigin(question) === QUESTION_ORIGIN.INTERVIEW;
+
+type ReviewSectionKey = "career" | "cv" | "ai";
+
 const cloneQuestionGroups = (groups: QuestionGroup[]): QuestionGroup[] =>
   groups.map((group) => ({
     ...group,
     questions: Array.isArray(group.questions)
-      ? group.questions.map((question: any) => ({
-          ...question,
-          options: Array.isArray(question?.options)
-            ? question.options.map((option: any) => ({ ...option }))
-            : [],
-        }))
+      ? group.questions.map((question: any) => normalizeQuestionEntry(question))
       : [],
   }));
 
@@ -130,6 +301,9 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
   JPY: "¥",
 };
 
+const INTERVIEW_QUESTION_COUNT = 5;
+const SEGMENTED_DRAFT_STORAGE_KEY = "jia-segmented-career-draft";
+
 const CURRENCY_DROPDOWN_IDS = {
   minimum: "salary-currency-minimum-menu",
   maximum: "salary-currency-maximum-menu",
@@ -140,6 +314,17 @@ const MEMBER_ROLE_OPTIONS = [
   { value: "collaborator", label: "Collaborator" },
   { value: "viewer", label: "Viewer" },
 ];
+
+const MEMBER_ROLE_LABEL_MAP: Record<string, string> = MEMBER_ROLE_OPTIONS.reduce(
+  (acc, option) => {
+    acc[option.value] = option.label;
+    return acc;
+  },
+  {} as Record<string, string>
+);
+
+const getMemberRoleLabel = (role?: string) =>
+  role && MEMBER_ROLE_LABEL_MAP[role] ? MEMBER_ROLE_LABEL_MAP[role] : role || "Member";
 
 interface SegmentedCareerFormProps {
   formType: "add" | "edit";
@@ -193,9 +378,11 @@ export default function SegmentedCareerForm({
     persistDraft,
   } = useSegmentedFormState();
   const [questions, setQuestions] = useState<QuestionGroup[]>(() =>
-    career?.questions && career.questions.length
-      ? career.questions
-      : createDefaultQuestionGroups()
+    normalizeQuestionGroups(
+      career?.questions && career.questions.length
+        ? career.questions
+        : createDefaultQuestionGroups()
+    )
   );
   const preScreeningGroup = useMemo(
     () => (questions.length > 0 ? questions[0] : undefined),
@@ -204,10 +391,445 @@ export default function SegmentedCareerForm({
   const preScreeningQuestions = useMemo(
     () =>
       preScreeningGroup && Array.isArray(preScreeningGroup.questions)
-        ? preScreeningGroup.questions
+        ? preScreeningGroup.questions.filter((question: any) => isPreScreenQuestion(question))
         : [],
     [preScreeningGroup]
   );
+  const [questionGenPrompt, setQuestionGenPrompt] = useState("");
+  const [pendingQuestionGeneration, setPendingQuestionGeneration] = useState<string | null>(null);
+  const [questionModalState, setQuestionModalState] = useState<QuestionModalState>({
+    action: "",
+    groupId: null,
+    questionToEdit: undefined,
+  });
+  // Drag state for interview questions
+  const [draggingInterviewQuestionId, setDraggingInterviewQuestionId] = useState<string | null>(null);
+  const [dragOverInterviewQuestionId, setDragOverInterviewQuestionId] = useState<string | null>(null);
+  const [activeDragInterviewGroupId, setActiveDragInterviewGroupId] = useState<number | null>(null);
+  const [interviewTailHoverGroupId, setInterviewTailHoverGroupId] = useState<number | null>(null);
+  const [showCvScreeningValidation, setShowCvScreeningValidation] = useState(false);
+  const [showAiQuestionValidation, setShowAiQuestionValidation] = useState(false);
+  const [expandedReviewSections, setExpandedReviewSections] = useState<Record<ReviewSectionKey, boolean>>({
+    career: true,
+    cv: true,
+    ai: true,
+  });
+  const totalInterviewQuestionCount = useMemo(
+    () =>
+      questions.reduce((total, group) => {
+        const groupQuestions = Array.isArray(group.questions) ? group.questions : [];
+        return total + groupQuestions.filter((question: any) => isInterviewQuestion(question)).length;
+      }, 0),
+    [questions]
+  );
+  const interviewQuestionGroups = useMemo(
+    () =>
+      questions.map((group) => ({
+        id: group.id,
+        category: group.category,
+        interviewQuestions: Array.isArray(group.questions)
+          ? group.questions.filter((question: any) => isInterviewQuestion(question))
+          : [],
+      })),
+    [questions]
+  );
+  const isGeneratingQuestions = pendingQuestionGeneration !== null;
+
+  useEffect(() => {
+    if (totalInterviewQuestionCount >= 5 && showAiQuestionValidation) {
+      setShowAiQuestionValidation(false);
+    }
+  }, [totalInterviewQuestionCount, showAiQuestionValidation]);
+
+  useEffect(() => {
+    if (isStepComplete("cv-screening") && showCvScreeningValidation) {
+      setShowCvScreeningValidation(false);
+    }
+  }, [draft.description, questions, showCvScreeningValidation]);
+  const toggleReviewSection = (section: ReviewSectionKey) => {
+    setExpandedReviewSections((current) => ({
+      ...current,
+      [section]: !current[section],
+    }));
+  };
+
+  const formatCountLabel = (count: number, singular: string, plural?: string) => {
+    const pluralLabel = plural ?? `${singular}s`;
+    if (count === 0) {
+      return `No ${pluralLabel.toLowerCase()}`;
+    }
+    if (count === 1) {
+      return `1 ${singular.toLowerCase()}`;
+    }
+    return `${count} ${pluralLabel.toLowerCase()}`;
+  };
+
+  const jobDescriptionMarkup = isDescriptionPresent(draft.description)
+    ? { __html: draft.description }
+    : null;
+  const normalizeQuestionText = (value: string) => value.trim().toLowerCase();
+  const normalizeCategoryName = (value: string) =>
+    value
+      .toLowerCase()
+      .replace(/\s*\/\s*/g, " / ")
+      .replace(/\s+/g, " ")
+      .trim();
+  const extractQuestionText = (entry: unknown): string => {
+    if (typeof entry === "string") {
+      return entry.trim();
+    }
+
+    if (entry && typeof entry === "object") {
+      const candidate = entry as Record<string, unknown>;
+
+      if (typeof candidate.question === "string") {
+        return candidate.question.trim();
+      }
+
+      if (typeof candidate.text === "string") {
+        return candidate.text.trim();
+      }
+
+      if (typeof candidate.prompt === "string") {
+        return candidate.prompt.trim();
+      }
+
+      const stringValue = Object.values(candidate).find((value) => typeof value === "string");
+      if (typeof stringValue === "string") {
+        return stringValue.trim();
+      }
+    }
+
+    return "";
+  };
+  const ensureQuestionCountWithinBounds = (group: QuestionGroup) => {
+    if (typeof group.questionCountToAsk !== "number") {
+      return;
+    }
+
+    const interviewCount = Array.isArray(group.questions)
+      ? group.questions.filter((question: any) => isInterviewQuestion(question)).length
+      : 0;
+
+    if (group.questionCountToAsk > interviewCount) {
+      group.questionCountToAsk = interviewCount;
+    }
+  };
+  const parseGeneratedQuestionPayload = (
+    raw: unknown,
+    categoryContext?: string | string[]
+  ) => {
+    if (!raw) {
+      throw new Error("Empty response from question generator");
+    }
+
+    if (typeof raw === "string") {
+      const sanitized = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
+      if (!sanitized) {
+        throw new Error("Unable to parse generated questions");
+      }
+
+      try {
+        return JSON.parse(sanitized);
+      } catch (error) {
+        // Attempt to extract inline JSON payloads from conversational responses
+        const extractAndParseJSON = (value: string) => {
+          const openingTokens: Array<{ open: string; close: string }> = [
+            { open: "[", close: "]" },
+            { open: "{", close: "}" },
+          ];
+
+          for (const token of openingTokens) {
+            const start = value.indexOf(token.open);
+            if (start === -1) {
+              continue;
+            }
+
+            let depth = 0;
+
+            for (let index = start; index < value.length; index += 1) {
+              const char = value[index];
+              if (char === token.open) {
+                depth += 1;
+              } else if (char === token.close) {
+                depth -= 1;
+                if (depth === 0) {
+                  const candidate = value.slice(start, index + 1);
+                  try {
+                    return JSON.parse(candidate);
+                  } catch (innerError) {
+                    // continue searching for other candidates
+                  }
+                }
+              }
+            }
+          }
+
+          return null;
+        };
+
+        const parsed = extractAndParseJSON(sanitized);
+        if (parsed) {
+          return parsed;
+        }
+
+        // Fallback: treat newline separated items as question strings for a single category
+        const fallbackItems = sanitized
+          .split(/\r?\n|\u2022|\*/)
+          .map((item) => item.replace(/^[\d\-\.\)\s]+/, "").trim())
+          .filter((item) => item.length > 0);
+
+        if (fallbackItems.length) {
+          if (typeof categoryContext === "string" && categoryContext.trim().length > 0) {
+            return [
+              {
+                category: categoryContext,
+                questions: fallbackItems,
+              },
+            ];
+          }
+
+          throw new Error("Unable to associate generated questions with a category context");
+        }
+
+        throw new Error("Generated questions are not valid JSON");
+      }
+    }
+
+    return raw;
+  };
+
+  // Reorder interview questions within a group
+  const handleReorderInterviewQuestions = (
+    groupId: number,
+    draggedId: string,
+    targetId: string | null
+  ) => {
+    setQuestions((prev) => {
+      const clone = prev.map((g) => ({ ...g, questions: Array.isArray(g.questions) ? [...g.questions] : [] }));
+      const group = clone.find((g) => g.id === groupId);
+      if (!group || !Array.isArray(group.questions)) return prev;
+
+      const interviewQuestions = group.questions.filter((q: any) => isInterviewQuestion(q));
+      const otherQuestions = group.questions.filter((q: any) => !isInterviewQuestion(q));
+
+      const getQuestionId = (q: any, idx: number) => (q?.id ?? `auto-${idx}`);
+      const originalOrderIds = interviewQuestions.map((q: any, idx: number) => getQuestionId(q, idx));
+      const draggedOriginalIndex = originalOrderIds.indexOf(draggedId);
+
+      if (draggedOriginalIndex === -1) {
+        return prev;
+      }
+
+      const draggedIndex = interviewQuestions.findIndex((q: any, idx: number) => {
+        const id = getQuestionId(q, idx);
+        return id === draggedId;
+      });
+      if (draggedIndex === -1) return prev;
+      const [draggedItem] = interviewQuestions.splice(draggedIndex, 1);
+
+      if (targetId) {
+        if (targetId === draggedId) {
+          interviewQuestions.splice(draggedIndex, 0, draggedItem);
+          group.questions = [...interviewQuestions, ...otherQuestions];
+          return clone;
+        }
+
+        const targetOriginalIndex = originalOrderIds.indexOf(targetId);
+        const targetIndex = interviewQuestions.findIndex((q: any, idx: number) => {
+          const id = getQuestionId(q, idx);
+          return id === targetId;
+        });
+        if (targetOriginalIndex === -1) {
+          interviewQuestions.push(draggedItem);
+        } else {
+          const adjustedTargetIndex = targetIndex === -1 ? interviewQuestions.length - 1 : targetIndex;
+          const isMovingDownward = draggedOriginalIndex < targetOriginalIndex;
+          const insertIndex = Math.min(
+            interviewQuestions.length,
+            isMovingDownward ? adjustedTargetIndex + 1 : Math.max(adjustedTargetIndex, 0)
+          );
+          interviewQuestions.splice(insertIndex, 0, draggedItem);
+        }
+      } else {
+        interviewQuestions.push(draggedItem); // drop at tail
+      }
+
+      group.questions = [...interviewQuestions, ...otherQuestions];
+      return clone;
+    });
+  };
+
+  const handleInterviewDragStart = (event: DragEvent<HTMLButtonElement>, questionId: string, groupId: number) => {
+    event.dataTransfer.effectAllowed = "move";
+    setDraggingInterviewQuestionId(questionId);
+    setActiveDragInterviewGroupId(groupId);
+    setInterviewTailHoverGroupId(null);
+  };
+
+  const handleInterviewDragEnter = (event: DragEvent<HTMLDivElement>, questionId: string) => {
+    if (!draggingInterviewQuestionId) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    if (questionId !== draggingInterviewQuestionId) {
+      setDragOverInterviewQuestionId(questionId);
+      setInterviewTailHoverGroupId(null);
+    }
+  };
+
+  const handleInterviewDragOver = (event: DragEvent<HTMLDivElement>, questionId: string) => {
+    if (!draggingInterviewQuestionId) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    if (questionId !== draggingInterviewQuestionId && dragOverInterviewQuestionId !== questionId) {
+      setDragOverInterviewQuestionId(questionId);
+      setInterviewTailHoverGroupId(null);
+    }
+  };
+
+  const handleInterviewDragLeave = (questionId: string) => {
+    if (dragOverInterviewQuestionId === questionId) {
+      setDragOverInterviewQuestionId(null);
+    }
+  };
+
+  const handleInterviewDrop = (event: DragEvent<HTMLDivElement>, questionId: string) => {
+    if (!draggingInterviewQuestionId || activeDragInterviewGroupId === null) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    handleReorderInterviewQuestions(activeDragInterviewGroupId, draggingInterviewQuestionId, questionId);
+    setDraggingInterviewQuestionId(null);
+    setDragOverInterviewQuestionId(null);
+    setActiveDragInterviewGroupId(null);
+    setInterviewTailHoverGroupId(null);
+  };
+
+  const handleInterviewDragEnd = () => {
+    setDraggingInterviewQuestionId(null);
+    setDragOverInterviewQuestionId(null);
+    setActiveDragInterviewGroupId(null);
+    setInterviewTailHoverGroupId(null);
+  };
+
+  const handleInterviewTailDragOver = (event: DragEvent<HTMLDivElement>, groupId: number) => {
+    if (!draggingInterviewQuestionId || activeDragInterviewGroupId !== groupId) {
+      return;
+    }
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+
+    if (interviewTailHoverGroupId !== groupId) {
+      setInterviewTailHoverGroupId(groupId);
+    }
+
+    if (dragOverInterviewQuestionId !== null) {
+      setDragOverInterviewQuestionId(null);
+    }
+  };
+
+  const handleInterviewTailDragLeave = (groupId: number) => {
+    if (interviewTailHoverGroupId === groupId) {
+      setInterviewTailHoverGroupId(null);
+    }
+  };
+
+  const handleInterviewTailDrop = (event: DragEvent<HTMLDivElement>, groupId: number) => {
+    if (!draggingInterviewQuestionId || activeDragInterviewGroupId === null) {
+      return;
+    }
+
+    if (groupId !== activeDragInterviewGroupId) {
+      return;
+    }
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+
+    handleReorderInterviewQuestions(groupId, draggingInterviewQuestionId, null);
+    setDraggingInterviewQuestionId(null);
+    setDragOverInterviewQuestionId(null);
+    setActiveDragInterviewGroupId(null);
+    setInterviewTailHoverGroupId(null);
+  };
+  const integrateGeneratedQuestions = (payload: any): boolean => {
+    const baseGroups = questions.length
+      ? cloneQuestionGroups(questions)
+      : normalizeQuestionGroups(createDefaultQuestionGroups());
+
+    const items = Array.isArray(payload) ? payload : payload ? [payload] : [];
+
+    let hasChanges = false;
+
+    items.forEach((entry) => {
+      const categoryName = typeof entry?.category === "string" ? entry.category : "";
+      const generatedQuestions = Array.isArray(entry?.questions)
+        ? entry.questions
+        : entry?.questions && typeof entry.questions === "object"
+          ? Object.values(entry.questions)
+          : [];
+
+      if (!categoryName || !generatedQuestions.length) {
+        return;
+      }
+
+      const normalizedCategoryName = normalizeCategoryName(categoryName);
+      const targetIndex = baseGroups.findIndex(
+        (group) => normalizeCategoryName(group.category) === normalizedCategoryName
+      );
+
+      if (targetIndex === -1) {
+        console.warn("[SegmentedCareerForm] Generated questions skipped (unknown category)", entry);
+        hasChanges = true;
+        return;
+      }
+
+      const targetGroup = baseGroups[targetIndex];
+      const existingQuestions = Array.isArray(targetGroup.questions)
+        ? targetGroup.questions
+        : [];
+      const existingLookup = new Set(
+        existingQuestions
+          .map((item: any) =>
+            typeof item?.question === "string" ? normalizeQuestionText(item.question) : ""
+          )
+          .filter(Boolean)
+      );
+
+      const additions = generatedQuestions
+        .map((item: unknown) => extractQuestionText(item))
+        .filter((item) => item.length > 0)
+        .filter((item) => {
+          const normalized = normalizeQuestionText(item);
+          if (existingLookup.has(normalized)) {
+            return false;
+          }
+          existingLookup.add(normalized);
+          return true;
+        })
+        .map((item) => ({ id: guid(), origin: QUESTION_ORIGIN.INTERVIEW, question: item }));
+
+      if (!additions.length) {
+        if (!existingQuestions.length && generatedQuestions.length) {
+          console.warn("[SegmentedCareerForm] Generated questions discarded after normalization", {
+            categoryName,
+            generatedQuestions,
+          });
+        }
+        return;
+      }
+
+      targetGroup.questions = [...existingQuestions, ...additions];
+      ensureQuestionCountWithinBounds(targetGroup);
+      hasChanges = true;
+    });
+
+    if (hasChanges) {
+      setQuestions(baseGroups);
+    }
+
+    return hasChanges;
+  };
   const [provinceList, setProvinceList] = useState<Array<any>>([]);
   const [cityList, setCityList] = useState<Array<any>>([]);
   const [members, setMembers] = useState<MemberRecord[]>([]);
@@ -220,6 +842,8 @@ export default function SegmentedCareerForm({
   const minimumCurrencyDropdownRef = useRef<HTMLDivElement | null>(null);
   const maximumCurrencyDropdownRef = useRef<HTMLDivElement | null>(null);
   const [openPreScreenTypeFor, setOpenPreScreenTypeFor] = useState<string | null>(null);
+  const persistedDraftQuestionsRef = useRef<string | null>(null);
+  const hasHydratedDraftRef = useRef(false);
   const [activeDragQuestionId, setActiveDragQuestionId] = useState<string | null>(null);
   const [draggingQuestionId, setDraggingQuestionId] = useState<string | null>(null);
   const [dragOverQuestionId, setDragOverQuestionId] = useState<string | null>(null);
@@ -332,6 +956,23 @@ export default function SegmentedCareerForm({
     };
   }, [openCurrencyDropdown]);
 
+  useEffect(() => {
+    const fetchQuestionInstruction = async () => {
+      try {
+        const response = await axios.post("/api/fetch-global-settings", {
+          fields: { question_gen_prompt: 1 },
+        });
+        const promptFromSettings =
+          response?.data?.question_gen_prompt?.prompt ?? "";
+        setQuestionGenPrompt(promptFromSettings);
+      } catch (error) {
+        console.error("[SegmentedCareerForm] Failed to load question prompt", error);
+      }
+    };
+
+    fetchQuestionInstruction();
+  }, []);
+
     // Rich descriptions for the role picker menu UI
     const ROLE_DESCRIPTIONS: Record<string, string> = {
       "Job Owner":
@@ -356,16 +997,43 @@ export default function SegmentedCareerForm({
   const baseTipsId = useId();
   const tipsBulbGradientId = `${baseTipsId}-bulb-gradient`;
   const tipsStarGradientId = `${baseTipsId}-star-gradient`;
+  const secretPromptFieldIds = useMemo(
+    () => ({
+      cv: {
+        input: `${baseTipsId}-secret-prompt-cv`,
+        description: `${baseTipsId}-secret-prompt-cv-desc`,
+      },
+      ai: {
+        input: `${baseTipsId}-secret-prompt-ai`,
+        description: `${baseTipsId}-secret-prompt-ai-desc`,
+      },
+    }),
+    [baseTipsId]
+  );
   const tipsContent = useMemo(() => {
     if (activeStep === "cv-screening") {
       return [
         {
-          heading: "Add a Secret Prompt",
-          body: "to fine-tune how Jia scores and evaluates submitted CVs.",
+          heading: "Add a CV Secret Prompt",
+          body: "Guide Jia's resume screening focus; you can set a separate interview prompt later.",
         },
         {
           heading: "Add Pre-Screening questions",
           body: "to collect key details such as notice period, work setup, or salary expectations to guide your review and candidate discussions.",
+        },
+      ];
+    }
+
+    if (activeStep === "ai-setup") {
+      return [
+        {
+          heading: "Add a Secret Prompt",
+          body: "to fine-tune how Jia scores and evaluates the interview responses.",
+        },
+        {
+          heading: 'Use "Generate Questions"',
+          body:
+            "to quickly create tailored interview questions, then refine or mix them with your own for balanced results.",
         },
       ];
     }
@@ -467,6 +1135,13 @@ export default function SegmentedCareerForm({
     return `${numericValue.toLocaleString()} ${selectedCurrency}`;
   };
 
+  const minimumSalaryDisplay = draft.salary.isNegotiable
+    ? "Negotiable"
+    : formatSalaryValue(draft.salary.minimum);
+  const maximumSalaryDisplay = draft.salary.isNegotiable
+    ? "Negotiable"
+    : formatSalaryValue(draft.salary.maximum);
+
   const renderCurrencyControl = (
     anchor: "minimum" | "maximum",
     ref: MutableRefObject<HTMLDivElement | null>
@@ -527,40 +1202,104 @@ export default function SegmentedCareerForm({
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      hasHydratedDraftRef.current = true;
+      return;
+    }
+
+    try {
+      const storedDraft = window.localStorage.getItem(SEGMENTED_DRAFT_STORAGE_KEY);
+      if (!storedDraft) {
+        hasHydratedDraftRef.current = true;
+        return;
+      }
+
+      const parsedDraft = JSON.parse(storedDraft);
+      if (parsedDraft && Array.isArray(parsedDraft.questions)) {
+        const normalizedPersistedQuestions = normalizeQuestionGroups(parsedDraft.questions);
+        persistedDraftQuestionsRef.current = JSON.stringify(normalizedPersistedQuestions);
+        return;
+      }
+
+      hasHydratedDraftRef.current = true;
+    } catch (error) {
+      console.warn("[SegmentedCareerForm] Unable to read persisted draft questions", error);
+      hasHydratedDraftRef.current = true;
+    }
+  }, []);
+
+  useEffect(() => {
     setProvinceList((locations as any).provinces || []);
   }, []);
 
   useEffect(() => {
     if (career) {
-      hydrateFromCareer({
-        career,
-        questions: career.questions || createDefaultQuestionGroups(),
-      });
-      setQuestions(
+      const normalizedCareerQuestions = normalizeQuestionGroups(
         career.questions && career.questions.length
           ? career.questions
           : createDefaultQuestionGroups()
       );
+
+      hydrateFromCareer({
+        career,
+        questions: normalizedCareerQuestions,
+      });
+      setQuestions(normalizedCareerQuestions);
     } else if (orgID) {
       loadPersistedDraft({ orgID });
     }
   }, [career, hydrateFromCareer, loadPersistedDraft, orgID]);
 
-  // Initialize questions from draft when component mounts or career changes
+  // Track the last serialized questions to prevent circular persistence updates
+  const questionsSyncRef = useRef<string>("");
+
+  // Hydrate local question state whenever the draft changes (e.g., after refresh)
   useEffect(() => {
-    if (draft.questions && Array.isArray(draft.questions) && draft.questions.length > 0) {
-      setQuestions(draft.questions);
+    if (!draft.questions || !Array.isArray(draft.questions)) {
+      return;
     }
-  }, []);
+
+    const normalizedDraftQuestions = normalizeQuestionGroups(draft.questions);
+    const serializedDraftQuestions = JSON.stringify(normalizedDraftQuestions);
+    const persistedSnapshot = persistedDraftQuestionsRef.current;
+
+    if (serializedDraftQuestions === questionsSyncRef.current) {
+      if (
+        persistedSnapshot === null ||
+        serializedDraftQuestions === persistedSnapshot
+      ) {
+        hasHydratedDraftRef.current = true;
+      }
+
+      if (hasHydratedDraftRef.current) {
+        persistedDraftQuestionsRef.current = serializedDraftQuestions;
+      }
+      return;
+    }
+
+    questionsSyncRef.current = serializedDraftQuestions;
+    setQuestions(normalizedDraftQuestions);
+
+    if (persistedSnapshot === null || serializedDraftQuestions === persistedSnapshot) {
+      hasHydratedDraftRef.current = true;
+    }
+
+    if (hasHydratedDraftRef.current) {
+      persistedDraftQuestionsRef.current = serializedDraftQuestions;
+    }
+  }, [draft.questions]);
 
   // Sync local questions state to draft when questions change
-  // Use a ref to track the previous questions to avoid circular updates
-  const questionsSyncRef = useRef<string>("");
   useEffect(() => {
     const questionsStr = JSON.stringify(questions);
     if (questionsStr !== questionsSyncRef.current) {
       questionsSyncRef.current = questionsStr;
+      if (!hasHydratedDraftRef.current) {
+        return;
+      }
+
       updateDraft({ questions });
+      persistedDraftQuestionsRef.current = questionsStr;
     }
   }, [questions, updateDraft]);
 
@@ -786,6 +1525,7 @@ export default function SegmentedCareerForm({
         defaultGroups[0].questions = [
           {
             id: guid(),
+            origin: QUESTION_ORIGIN.PRE_SCREEN,
             question: trimmed,
             answerType,
             options: normalizedOptions,
@@ -807,6 +1547,7 @@ export default function SegmentedCareerForm({
         ...targetGroup.questions,
         {
           id: guid(),
+          origin: QUESTION_ORIGIN.PRE_SCREEN,
           question: trimmed,
           answerType,
           options: normalizedOptions,
@@ -842,14 +1583,18 @@ export default function SegmentedCareerForm({
       }
 
       const initialLength = targetGroup.questions.length;
-      targetGroup.questions = targetGroup.questions.filter(
-        (item: any) => item?.id !== questionId
-      );
+      const filtered = targetGroup.questions.filter((item: any) => {
+        if (String(item?.id) !== questionId) {
+          return true;
+        }
+        return !isPreScreenQuestion(item);
+      });
 
-      if (targetGroup.questions.length === initialLength) {
+      if (filtered.length === initialLength) {
         return previous;
       }
 
+      targetGroup.questions = filtered;
       return nextGroups;
     });
   };
@@ -878,9 +1623,13 @@ export default function SegmentedCareerForm({
       }
 
       const currentQuestion = targetGroup.questions[questionIndex];
+      if (!isPreScreenQuestion(currentQuestion)) {
+        return previous;
+      }
       const nextQuestion = {
         ...currentQuestion,
         ...updates,
+        origin: QUESTION_ORIGIN.PRE_SCREEN,
       };
 
       if (updates.answerType) {
@@ -939,6 +1688,11 @@ export default function SegmentedCareerForm({
 
       const [movedQuestion] = questionList.splice(sourceIndex, 1);
       if (!movedQuestion) {
+        return previous;
+      }
+
+      if (!isPreScreenQuestion(movedQuestion)) {
+        questionList.splice(sourceIndex, 0, movedQuestion);
         return previous;
       }
 
@@ -1039,7 +1793,7 @@ export default function SegmentedCareerForm({
       }
 
       const nextQuestion = targetGroup.questions.find((item: any) => item?.id === questionId);
-      if (!nextQuestion || nextQuestion.answerType !== "range") {
+      if (!nextQuestion || !isPreScreenQuestion(nextQuestion) || nextQuestion.answerType !== "range") {
         return previous;
       }
 
@@ -1066,6 +1820,7 @@ export default function SegmentedCareerForm({
 
       if (
         !nextQuestion ||
+        !isPreScreenQuestion(nextQuestion) ||
         (nextQuestion.answerType !== "dropdown" && nextQuestion.answerType !== "checkboxes")
       ) {
         return previous;
@@ -1109,6 +1864,7 @@ export default function SegmentedCareerForm({
 
       if (
         !nextQuestion ||
+        !isPreScreenQuestion(nextQuestion) ||
         (nextQuestion.answerType !== "dropdown" && nextQuestion.answerType !== "checkboxes")
       ) {
         return previous;
@@ -1142,6 +1898,7 @@ export default function SegmentedCareerForm({
 
       if (
         !nextQuestion ||
+        !isPreScreenQuestion(nextQuestion) ||
         (nextQuestion.answerType !== "dropdown" && nextQuestion.answerType !== "checkboxes")
       ) {
         return previous;
@@ -1170,6 +1927,7 @@ export default function SegmentedCareerForm({
         defaultGroups[0].questions = [
           {
             id: newQuestionId,
+            origin: QUESTION_ORIGIN.PRE_SCREEN,
             question: "",
             answerType: "short_text",
             options: [],
@@ -1194,6 +1952,7 @@ export default function SegmentedCareerForm({
         ...currentQuestions,
         {
           id: newQuestionId,
+          origin: QUESTION_ORIGIN.PRE_SCREEN,
           question: "",
           answerType: "short_text",
           options: [],
@@ -1223,6 +1982,470 @@ export default function SegmentedCareerForm({
     );
   };
 
+  const addInterviewQuestionToGroup = (groupId: number, rawQuestion: string) => {
+    const trimmedQuestion = rawQuestion.trim();
+    if (!trimmedQuestion) {
+      errorToast("Question cannot be empty", 1400);
+      return;
+    }
+
+    let wasAdded = false;
+
+    setQuestions((previous) => {
+      const baseGroups = previous.length
+        ? cloneQuestionGroups(previous)
+        : normalizeQuestionGroups(createDefaultQuestionGroups());
+      const targetIndex = baseGroups.findIndex((group) => group.id === groupId);
+
+      if (targetIndex === -1) {
+        return previous.length ? previous : baseGroups;
+      }
+
+      const targetGroup = baseGroups[targetIndex];
+      const existingQuestions = Array.isArray(targetGroup.questions)
+        ? targetGroup.questions
+        : [];
+      const normalizedNewQuestion = normalizeQuestionText(trimmedQuestion);
+      const duplicateExists = existingQuestions.some(
+        (item: any) =>
+          typeof item?.question === "string" &&
+          normalizeQuestionText(item.question) === normalizedNewQuestion
+      );
+
+      if (duplicateExists) {
+        return previous.length ? previous : baseGroups;
+      }
+
+      targetGroup.questions = [
+        ...existingQuestions,
+        { id: guid(), origin: QUESTION_ORIGIN.INTERVIEW, question: trimmedQuestion },
+      ];
+
+      ensureQuestionCountWithinBounds(targetGroup);
+      wasAdded = true;
+      return baseGroups;
+    });
+
+    if (wasAdded) {
+      candidateActionToast(
+        <span style={{ fontSize: 14, fontWeight: 700, color: "#181D27" }}>
+          Question added
+        </span>,
+        1400,
+        <i className="la la-check-circle" style={{ color: "#039855", fontSize: 24 }}></i>
+      );
+    } else {
+      errorToast("Question already exists in this category", 1400);
+    }
+  };
+
+  const updateInterviewQuestionInGroup = (
+    groupId: number,
+    questionId: string | number,
+    rawQuestion: string
+  ) => {
+    const trimmedQuestion = rawQuestion.trim();
+    if (!trimmedQuestion) {
+      errorToast("Question cannot be empty", 1400);
+      return;
+    }
+
+    const normalizedQuestionId = String(questionId);
+    let wasUpdated = false;
+    let duplicateDetected = false;
+
+    setQuestions((previous) => {
+      if (!previous.length) {
+        return previous;
+      }
+
+      const nextGroups = cloneQuestionGroups(previous);
+      const targetIndex = nextGroups.findIndex((group) => group.id === groupId);
+      if (targetIndex === -1) {
+        return previous;
+      }
+
+      const targetGroup = nextGroups[targetIndex];
+      const existingQuestions = Array.isArray(targetGroup.questions)
+        ? targetGroup.questions
+        : [];
+      const normalizedNewQuestion = normalizeQuestionText(trimmedQuestion);
+
+      duplicateDetected = existingQuestions.some(
+        (item: any) =>
+          typeof item?.question === "string" &&
+          normalizeQuestionText(item.question) === normalizedNewQuestion &&
+          String(item?.id) !== normalizedQuestionId
+      );
+
+      if (duplicateDetected) {
+        return previous;
+      }
+
+      const questionIndex = existingQuestions.findIndex(
+        (item: any) => String(item?.id) === normalizedQuestionId
+      );
+
+      if (questionIndex === -1) {
+        return previous;
+      }
+
+      const targetQuestion = existingQuestions[questionIndex];
+      if (!isInterviewQuestion(targetQuestion)) {
+        return previous;
+      }
+
+      targetGroup.questions[questionIndex] = {
+        ...targetQuestion,
+        origin: QUESTION_ORIGIN.INTERVIEW,
+        question: trimmedQuestion,
+      };
+
+      wasUpdated = true;
+      return nextGroups;
+    });
+
+    if (duplicateDetected) {
+      errorToast("Question already exists in this category", 1400);
+      return;
+    }
+
+    if (wasUpdated) {
+      candidateActionToast(
+        <span style={{ fontSize: 14, fontWeight: 700, color: "#181D27" }}>
+          Question updated
+        </span>,
+        1400,
+        <i className="la la-check-circle" style={{ color: "#039855", fontSize: 24 }}></i>
+      );
+    }
+  };
+
+  const removeInterviewQuestionFromGroup = (groupId: number, questionId: string | number) => {
+    let wasRemoved = false;
+
+    setQuestions((previous) => {
+      if (!previous.length) {
+        return previous;
+      }
+
+      const nextGroups = cloneQuestionGroups(previous);
+      const targetIndex = nextGroups.findIndex((group) => group.id === groupId);
+      if (targetIndex === -1) {
+        return previous;
+      }
+
+      const targetGroup = nextGroups[targetIndex];
+      const existingQuestions = Array.isArray(targetGroup.questions)
+        ? targetGroup.questions
+        : [];
+      const initialLength = existingQuestions.length;
+
+      const filtered = existingQuestions.filter((item: any) => {
+        if (!isInterviewQuestion(item)) {
+          return true;
+        }
+        return String(item?.id) !== String(questionId);
+      });
+
+      if (filtered.length === initialLength) {
+        return previous;
+      }
+
+      targetGroup.questions = filtered;
+      ensureQuestionCountWithinBounds(targetGroup);
+      wasRemoved = true;
+      return nextGroups;
+    });
+
+    if (wasRemoved) {
+      candidateActionToast(
+        <span style={{ fontSize: 14, fontWeight: 700, color: "#181D27" }}>
+          Question deleted
+        </span>,
+        1400,
+        <i className="la la-check-circle" style={{ color: "#039855", fontSize: 24 }}></i>
+      );
+    }
+  };
+
+  const openQuestionModal = (
+    action: QuestionModalAction,
+    groupId: number,
+    questionToEdit?: { id: string | number; question: string }
+  ) => {
+    setQuestionModalState({ action, groupId, questionToEdit });
+  };
+
+  const closeQuestionModal = () => {
+    setQuestionModalState({ action: "", groupId: null, questionToEdit: undefined });
+  };
+
+  const handleQuestionModalAction = (
+    action: string,
+    groupId?: number,
+    questionText?: string,
+    questionId?: string | number
+  ) => {
+    if (!action) {
+      closeQuestionModal();
+      return;
+    }
+
+    const resolvedGroupId = groupId ?? questionModalState.groupId;
+    if (!resolvedGroupId) {
+      closeQuestionModal();
+      return;
+    }
+
+    if (action === "add" && typeof questionText === "string") {
+      addInterviewQuestionToGroup(resolvedGroupId, questionText);
+    } else if (
+      action === "edit" &&
+      typeof questionText === "string" &&
+      typeof questionId !== "undefined"
+    ) {
+      updateInterviewQuestionInGroup(resolvedGroupId, questionId, questionText);
+    } else if (action === "delete" && typeof questionId !== "undefined") {
+      removeInterviewQuestionFromGroup(resolvedGroupId, questionId);
+    }
+
+    closeQuestionModal();
+  };
+
+  const ensureJobDetailsForGeneration = () => {
+    const jobTitle = draft.jobTitle.trim();
+    const plainDescription = (draft.description || "").replace(/<[^>]+>/g, " ").trim();
+
+    if (!jobTitle || !plainDescription) {
+      errorToast("Please complete the job title and description first", 1500);
+      return null;
+    }
+
+    return { jobTitle, plainDescription };
+  };
+
+  const buildExistingQuestionList = () =>
+    questions
+      .map((group) => {
+        const groupQuestions = Array.isArray(group.questions)
+          ? group.questions.filter((question: any) => isInterviewQuestion(question))
+          : [];
+        if (!groupQuestions.length) {
+          return "";
+        }
+
+        return groupQuestions
+          .map(
+            (question: any, index: number) =>
+              `          ${index + 1}. ${question.question}`
+          )
+          .join("\n");
+      })
+      .filter(Boolean)
+      .join("\n");
+
+  const handleGenerateAllInterviewQuestions = async () => {
+    if (pendingQuestionGeneration) {
+      return;
+    }
+
+    const jobDetails = ensureJobDetailsForGeneration();
+    if (!jobDetails) {
+      return;
+    }
+
+    const categories = Object.keys(interviewQuestionCategoryMap);
+    const totalExisting = questions.reduce(
+      (acc, group) =>
+        acc +
+        (Array.isArray(group.questions)
+          ? group.questions.filter((question: any) => isInterviewQuestion(question)).length
+          : 0),
+      0
+    );
+
+    const promptSegments = [
+      `Generate ${INTERVIEW_QUESTION_COUNT * categories.length} interview questions for the following Job opening:`,
+      "Job Title:",
+      jobDetails.jobTitle,
+      "Job Description:",
+      jobDetails.plainDescription,
+      categories
+        .map((category) => {
+          const categoryDetails = interviewQuestionCategoryMap[
+            category as keyof typeof interviewQuestionCategoryMap
+          ];
+          return `Category:\n${category}\nCategory Description:\n${categoryDetails?.description ?? ""}`;
+        })
+        .join("\n\n"),
+      categories
+        .map((category) => `${INTERVIEW_QUESTION_COUNT} questions for ${category}`)
+        .join(", "),
+    ];
+
+    if (totalExisting > 0) {
+      promptSegments.push(
+        `Do not generate questions that are already covered in this list:\n${buildExistingQuestionList()}`
+      );
+    }
+
+    if (questionGenPrompt) {
+      promptSegments.push(questionGenPrompt);
+    }
+
+    promptSegments.push(
+      "Respond ONLY with valid JSON.",
+      "Use this exact JSON schema:",
+  '[{"category":"<category name>","questions":["Question 1","Question 2","Question 3","Question 4","Question 5"]}]',
+      "The JSON array must contain one object per interview category listed above, using the same category names.",
+  "Each object must list exactly the generated questions in the questions array.",
+  `Each questions array must contain exactly ${INTERVIEW_QUESTION_COUNT} items.`,
+      "Do not include any explanations, markdown fences, or surrounding text."
+    );
+
+    setPendingQuestionGeneration("all");
+
+    try {
+      const response = await axios.post("/api/llm-engine", {
+        systemPrompt:
+          "You are a helpful assistant that can answer questions and help with tasks.",
+        prompt: promptSegments.join("\n\n"),
+      });
+
+      const parsed = parseGeneratedQuestionPayload(
+        response?.data?.result ?? response?.data,
+        categories
+      );
+
+      console.log("[SegmentedCareerForm] Generate all - Raw response:", response?.data);
+      console.log("[SegmentedCareerForm] Generate all - Parsed payload:", parsed);
+
+      const hasChanges = integrateGeneratedQuestions(parsed);
+
+      console.log("[SegmentedCareerForm] Generate all - hasChanges:", hasChanges);
+
+      if (hasChanges) {
+        candidateActionToast(
+          <span style={{ fontSize: 14, fontWeight: 700, color: "#181D27", marginLeft: 8 }}>
+            Questions generated successfully
+          </span>,
+          1500,
+          <i className="la la-check-circle" style={{ color: "#039855", fontSize: 32 }}></i>
+        );
+      } else {
+        errorToast("No new questions generated", 1500);
+      }
+    } catch (error) {
+      console.error("[SegmentedCareerForm] Failed to generate interview questions", error);
+      errorToast("Error generating questions, please try again", 1500);
+    } finally {
+      setPendingQuestionGeneration(null);
+    }
+  };
+
+  const handleGenerateQuestionsForCategory = async (categoryName: string) => {
+    if (pendingQuestionGeneration) {
+      return;
+    }
+
+    const jobDetails = ensureJobDetailsForGeneration();
+    if (!jobDetails) {
+      return;
+    }
+
+    const categoryDefinition = interviewQuestionCategoryMap[
+      categoryName as keyof typeof interviewQuestionCategoryMap
+    ];
+    if (!categoryDefinition) {
+      errorToast("Unknown interview category", 1500);
+      return;
+    }
+
+    const promptSegments = [
+      `Generate ${INTERVIEW_QUESTION_COUNT} interview questions for the following Job opening:`,
+      "Job Title:",
+      jobDetails.jobTitle,
+      "Job Description:",
+      jobDetails.plainDescription,
+      "Interview Category:",
+      categoryName,
+      "Interview Category Description:",
+      categoryDefinition.description,
+      `The ${INTERVIEW_QUESTION_COUNT} interview questions should be related to the job description and follow the scope of the interview category.`,
+    ];
+
+    const totalExisting = questions.reduce(
+      (acc, group) =>
+        acc +
+        (Array.isArray(group.questions)
+          ? group.questions.filter((question: any) => isInterviewQuestion(question)).length
+          : 0),
+      0
+    );
+
+    if (totalExisting > 0) {
+      promptSegments.push(
+        `Do not generate questions that are already covered in this list:\n${buildExistingQuestionList()}`
+      );
+    }
+
+    if (questionGenPrompt) {
+      promptSegments.push(questionGenPrompt);
+    }
+
+    promptSegments.push(
+      "Respond ONLY with valid JSON.",
+      "Return an array containing a single object with this exact structure:",
+  `[{"category":"${categoryName}","questions":["Question 1","Question 2","Question 3","Question 4","Question 5"]}]`,
+      "Use the category value provided above verbatim.",
+      `Provide exactly ${INTERVIEW_QUESTION_COUNT} questions in the questions array.`,
+      "Do not include any explanations, markdown fences, or extra text."
+    );
+
+    setPendingQuestionGeneration(categoryName);
+
+    try {
+      const response = await axios.post("/api/llm-engine", {
+        systemPrompt:
+          "You are a helpful assistant that can answer questions and help with tasks.",
+        prompt: promptSegments.join("\n\n"),
+      });
+
+      const parsed = parseGeneratedQuestionPayload(
+        response?.data?.result ?? response?.data,
+        categoryName
+      );
+
+      console.log("[SegmentedCareerForm] Generate category - Raw response:", response?.data);
+      console.log("[SegmentedCareerForm] Generate category - Parsed payload:", parsed);
+
+      const hasChanges = integrateGeneratedQuestions(parsed);
+
+      console.log("[SegmentedCareerForm] Generate category - hasChanges:", hasChanges);
+
+      if (hasChanges) {
+        candidateActionToast(
+          <span style={{ fontSize: 14, fontWeight: 700, color: "#181D27", marginLeft: 8 }}>
+            {`Generated ${categoryName} questions`}
+          </span>,
+          1500,
+          <i className="la la-check-circle" style={{ color: "#039855", fontSize: 32 }}></i>
+        );
+      } else {
+        errorToast("No new questions generated", 1500);
+      }
+    } catch (error) {
+      console.error(
+        `[SegmentedCareerForm] Failed to generate interview questions for ${categoryName}`,
+        error
+      );
+      errorToast("Error generating questions, please try again", 1500);
+    } finally {
+      setPendingQuestionGeneration(null);
+    }
+  };
+
   const isStepComplete = (step: SegmentedCareerStep) => {
     switch (step) {
       case "career-details":
@@ -1250,7 +2473,7 @@ export default function SegmentedCareerForm({
           )
         );
       case "ai-setup":
-        return questions.some((group) => group.questions && group.questions.length > 0);
+        return totalInterviewQuestionCount >= 5;
       case "pipeline":
         return true;
       case "review":
@@ -1264,8 +2487,8 @@ export default function SegmentedCareerForm({
     () =>
       isStepComplete("career-details") &&
       isStepComplete("cv-screening") &&
-      questions.some((group) => group.questions && group.questions.length > 0),
-    [questions, draft, teamMembers]
+      totalInterviewQuestionCount >= 5,
+    [questions, draft, teamMembers, totalInterviewQuestionCount]
   );
 
   const currentStepIndex = useMemo(
@@ -1292,6 +2515,20 @@ export default function SegmentedCareerForm({
     return Math.min(1, ratio);
   }, [currentStepIndex]);
 
+  const requireVideoSetting = draft.requireVideo ?? true;
+
+  useEffect(() => {
+    if (draft.requireVideo === undefined) {
+      updateDraft({ requireVideo: true });
+    }
+    if (draft.cvSecretPrompt === undefined) {
+      updateDraft({ cvSecretPrompt: "" });
+    }
+    if (draft.aiInterviewSecretPrompt === undefined) {
+      updateDraft({ aiInterviewSecretPrompt: "" });
+    }
+  }, [draft.requireVideo, draft.cvSecretPrompt, draft.aiInterviewSecretPrompt, updateDraft]);
+
   const goToNextStep = () => {
     if (currentStepIndex === -1 || currentStepIndex === segmentedSteps.length - 1) {
       return;
@@ -1300,8 +2537,18 @@ export default function SegmentedCareerForm({
     if (!isStepComplete(activeStep)) {
       if (activeStep === "career-details") {
         setShowCareerDetailsErrors(true);
+        return;
       }
-      errorToast("Please complete the required fields before continuing", 1600);
+
+      if (activeStep === "cv-screening") {
+        setShowCvScreeningValidation(true);
+        return;
+      }
+
+      if (activeStep === "ai-setup") {
+        setShowAiQuestionValidation(true);
+        return;
+      }
       return;
     }
 
@@ -1341,7 +2588,8 @@ export default function SegmentedCareerForm({
       description: draft.description,
       workSetup: draft.workSetup,
       workSetupRemarks: draft.workSetupRemarks,
-  cvSecretPrompt: draft.cvSecretPrompt,
+      cvSecretPrompt: draft.cvSecretPrompt,
+      aiInterviewSecretPrompt: draft.aiInterviewSecretPrompt,
       questions,
       lastEditedBy: career?.lastEditedBy || {
         image: user?.image,
@@ -1354,11 +2602,12 @@ export default function SegmentedCareerForm({
         email: user?.email,
       },
       screeningSetting: draft.screeningSetting,
+      requireVideo: requireVideoSetting,
       orgID,
       salaryNegotiable: draft.salary.isNegotiable,
       minimumSalary,
       maximumSalary,
-  salaryCurrency: selectedCurrency,
+      salaryCurrency: selectedCurrency,
       country: draft.location.country,
       province: draft.location.province,
       location: draft.location.city,
@@ -1380,7 +2629,6 @@ export default function SegmentedCareerForm({
       if (!isStepComplete("career-details")) {
         setActiveStep("career-details");
         setShowCareerDetailsErrors(true);
-        errorToast("Please complete the required fields before continuing", 1600);
         return;
       }
 
@@ -1388,10 +2636,13 @@ export default function SegmentedCareerForm({
         const alreadyOnScreeningStep = activeStep === "cv-screening";
 
         setActiveStep("cv-screening");
+        setShowCvScreeningValidation(true);
+        return;
+      }
 
-        if (alreadyOnScreeningStep) {
-          errorToast("Please complete the required fields before continuing", 1600);
-        }
+      if (!isStepComplete("ai-setup")) {
+        setActiveStep("ai-setup");
+        setShowAiQuestionValidation(true);
 
         return;
       }
@@ -1510,6 +2761,285 @@ export default function SegmentedCareerForm({
     return "Not saved yet";
   }, [draft.context?.lastPersistedAt, career?.updatedAt]);
 
+  const renderCareerReviewSection = () => (
+    <div className={styles.reviewAccordionBody}>
+      <div className={styles.reviewMetaRow}>
+        <span>Last saved: {lastSavedTimestamp}</span>
+      </div>
+      <div className={styles.reviewSectionGroup}>
+        <h5 className={styles.reviewSectionTitle}>Job information</h5>
+        <dl className={styles.reviewDataGrid}>
+          <div className={styles.reviewDataItem}>
+            <dt>Job title</dt>
+            <dd>{draft.jobTitle || "Not specified"}</dd>
+          </div>
+          <div className={styles.reviewDataItem}>
+            <dt>Employment type</dt>
+            <dd>{draft.employmentType || "Not specified"}</dd>
+          </div>
+          <div className={styles.reviewDataItem}>
+            <dt>Work arrangement</dt>
+            <dd>{draft.workSetup || "Not specified"}</dd>
+          </div>
+          <div className={styles.reviewDataItem}>
+            <dt>Country</dt>
+            <dd>{draft.location.country || "Not specified"}</dd>
+          </div>
+          <div className={styles.reviewDataItem}>
+            <dt>State / Province</dt>
+            <dd>{draft.location.province || "Not specified"}</dd>
+          </div>
+          <div className={styles.reviewDataItem}>
+            <dt>City</dt>
+            <dd>{draft.location.city || "Not specified"}</dd>
+          </div>
+          <div className={styles.reviewDataItem}>
+            <dt>Minimum salary</dt>
+            <dd>{minimumSalaryDisplay}</dd>
+          </div>
+          <div className={styles.reviewDataItem}>
+            <dt>Maximum salary</dt>
+            <dd>{maximumSalaryDisplay}</dd>
+          </div>
+        </dl>
+      </div>
+      <div className={styles.reviewSectionGroup}>
+        <h5 className={styles.reviewSectionTitle}>Job description</h5>
+        {jobDescriptionMarkup ? (
+          <div
+            className={styles.reviewRichText}
+            dangerouslySetInnerHTML={jobDescriptionMarkup}
+          ></div>
+        ) : (
+          <p className={styles.reviewEmptyState}>No description provided.</p>
+        )}
+      </div>
+      <div className={styles.reviewSectionGroup}>
+        <h5 className={styles.reviewSectionTitle}>Team access</h5>
+        {teamMembers.length ? (
+          <ul className={styles.reviewTeamList}>
+            {teamMembers.map((member: any) => {
+              const displayName = member.name || member.email || "Member";
+              const displayEmail = member.email || "—";
+              return (
+                <li key={member.memberId} className={styles.reviewTeamItem}>
+                  {member.image ? (
+                    <img
+                      src={member.image}
+                      alt={displayName}
+                      className={styles.reviewTeamAvatarImage}
+                    />
+                  ) : (
+                    <span className={styles.reviewTeamAvatarFallback} aria-hidden="true">
+                      {(displayName || "?").charAt(0)}
+                    </span>
+                  )}
+                  <div className={styles.reviewTeamInfo}>
+                    <span className={styles.reviewTeamName}>{displayName}</span>
+                    <span className={styles.reviewTeamEmail}>{displayEmail}</span>
+                  </div>
+                  <span className={styles.reviewTeamRole}>{getMemberRoleLabel(member.role)}</span>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className={styles.reviewEmptyState}>No team members assigned.</p>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderCvReviewSection = () => (
+    <div className={styles.reviewAccordionBody}>
+      <div className={styles.reviewSectionGroup}>
+        <h5 className={styles.reviewSectionTitle}>CV screening settings</h5>
+        <dl className={styles.reviewDataGrid}>
+          <div className={styles.reviewDataItem}>
+            <dt>Auto-endorse rule</dt>
+            <dd>{draft.screeningSetting || "Not configured"}</dd>
+          </div>
+          <div className={styles.reviewDataItem}>
+            <dt>Pre-screening questions</dt>
+            <dd>
+              {preScreeningQuestions.length
+                ? `${preScreeningQuestions.length} configured`
+                : "None configured"}
+            </dd>
+          </div>
+        </dl>
+      </div>
+      <div className={styles.reviewSectionGroup}>
+        <h5 className={styles.reviewSectionTitle}>CV secret prompt</h5>
+        {draft.cvSecretPrompt ? (
+          <div className={styles.reviewPromptBox}>{draft.cvSecretPrompt}</div>
+        ) : (
+          <p className={styles.reviewEmptyState}>No secret prompt provided.</p>
+        )}
+      </div>
+      <div className={styles.reviewSectionGroup}>
+        <h5 className={styles.reviewSectionTitle}>Pre-screening questions</h5>
+        {preScreeningQuestions.length ? (
+          <ol className={styles.reviewQuestionList}>
+            {preScreeningQuestions.map((question: any, index: number) => {
+              const questionText =
+                typeof question?.question === "string" && question.question.trim().length
+                  ? question.question.trim()
+                  : `Question ${index + 1}`;
+              const answerType =
+                typeof question?.answerType === "string"
+                  ? (question.answerType as PreScreenQuestionType)
+                  : "short_text";
+              const optionLabels = Array.isArray(question?.options)
+                ? question.options
+                    .map((option: any) => option?.label)
+                    .filter((label: any) => typeof label === "string" && label.trim().length)
+                : [];
+              const hasRangeValues = answerType === "range";
+              return (
+                <li key={question?.id ?? `pre-screen-${index}`} className={styles.reviewQuestionItem}>
+                  <div className={styles.reviewQuestionHeader}>
+                    <span className={styles.reviewQuestionText}>
+                      {index + 1}. {questionText}
+                    </span>
+                    <span className={styles.reviewPill}>{getPreScreenTypeLabel(answerType)}</span>
+                  </div>
+                  {optionLabels.length > 0 && (
+                    <ul className={styles.reviewQuestionSublist}>
+                      {optionLabels.map((label: string, optionIndex: number) => (
+                        <li key={`${question?.id ?? index}-option-${optionIndex}`}>{label}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {hasRangeValues && (
+                    <div className={styles.reviewQuestionRange}>
+                      Range: {question?.rangeMin || "—"} – {question?.rangeMax || "—"}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        ) : (
+          <p className={styles.reviewEmptyState}>No pre-screening questions configured.</p>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderAiReviewSection = () => {
+    const populatedInterviewGroups = interviewQuestionGroups.filter(
+      (group) => group.interviewQuestions.length > 0
+    );
+
+    return (
+      <div className={styles.reviewAccordionBody}>
+        <div className={styles.reviewSectionGroup}>
+          <h5 className={styles.reviewSectionTitle}>Interview settings</h5>
+          <dl className={styles.reviewDataGrid}>
+            <div className={styles.reviewDataItem}>
+              <dt>Require video on interview</dt>
+              <dd>{requireVideoSetting ? "Yes" : "No"}</dd>
+            </div>
+            <div className={styles.reviewDataItem}>
+              <dt>Total interview questions</dt>
+              <dd>{totalInterviewQuestionCount}</dd>
+            </div>
+          </dl>
+        </div>
+        <div className={styles.reviewSectionGroup}>
+          <h5 className={styles.reviewSectionTitle}>Interview secret prompt</h5>
+          {draft.aiInterviewSecretPrompt ? (
+            <div className={styles.reviewPromptBox}>{draft.aiInterviewSecretPrompt}</div>
+          ) : (
+            <p className={styles.reviewEmptyState}>No secret prompt provided.</p>
+          )}
+        </div>
+        <div className={styles.reviewSectionGroup}>
+          <h5 className={styles.reviewSectionTitle}>Interview question bank</h5>
+          {populatedInterviewGroups.length ? (
+            <div className={styles.reviewQuestionGroups}>
+              {populatedInterviewGroups.map((group) => (
+                <div key={group.id} className={styles.reviewQuestionGroup}>
+                  <div className={styles.reviewQuestionGroupHeader}>
+                    <span>{group.category}</span>
+                    <span className={styles.reviewQuestionCount}>
+                      {formatCountLabel(
+                        group.interviewQuestions.length,
+                        "Interview question",
+                        "Interview questions"
+                      )}
+                    </span>
+                  </div>
+                  <ol className={styles.reviewQuestionList}>
+                    {group.interviewQuestions.map((question: any, index: number) => {
+                      const questionText =
+                        typeof question?.question === "string" && question.question.trim().length
+                          ? question.question.trim()
+                          : `Question ${index + 1}`;
+                      return (
+                        <li
+                          key={question?.id ?? `interview-${group.id}-${index}`}
+                          className={styles.reviewQuestionItem}
+                        >
+                          <div className={styles.reviewQuestionHeader}>
+                            <span className={styles.reviewQuestionText}>
+                              {index + 1}. {questionText}
+                            </span>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className={styles.reviewEmptyState}>No interview questions configured.</p>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const reviewSections: Array<{
+    key: ReviewSectionKey;
+    title: string;
+    subtitle: string;
+    meta: string;
+    render: () => ReactNode;
+  }> = [
+    {
+      key: "career",
+      title: "Career Details & Team Access",
+      subtitle: "Step 1",
+      meta: draft.jobTitle || "No job title yet",
+      render: renderCareerReviewSection,
+    },
+    {
+      key: "cv",
+      title: "CV Review & Pre-Screening",
+      subtitle: "Step 2",
+      meta: formatCountLabel(
+        preScreeningQuestions.length,
+        "Pre-screen question",
+        "Pre-screen questions"
+      ),
+      render: renderCvReviewSection,
+    },
+    {
+      key: "ai",
+      title: "AI Interview Setup",
+      subtitle: "Step 3",
+      meta: formatCountLabel(
+        totalInterviewQuestionCount,
+        "Interview question",
+        "Interview questions"
+      ),
+      render: renderAiReviewSection,
+    },
+  ];
+
   return (
     <div className={styles.wrapper}>
       <div className={styles.pageHeader}>
@@ -1548,9 +3078,13 @@ export default function SegmentedCareerForm({
             const isCompleted = index < currentStepIndex && isStepComplete(step.id);
             const canNavigate = canNavigateToStep(step.id, index);
             const stepHasErrors =
-              step.id === "career-details" &&
-              showCareerDetailsErrors &&
-              !isStepComplete("career-details");
+              (step.id === "career-details" &&
+                showCareerDetailsErrors &&
+                !isStepComplete("career-details")) ||
+              (step.id === "cv-screening" &&
+                showCvScreeningValidation &&
+                !isStepComplete("cv-screening")) ||
+              (step.id === "ai-setup" && showAiQuestionValidation && totalInterviewQuestionCount < 5);
             
             let stepProgressWidth = 0;
             if (isCompleted) {
@@ -2197,6 +3731,29 @@ export default function SegmentedCareerForm({
                   </div>
                 </header>
                 <div className={styles.cardInner}>
+                  {showCvScreeningValidation && !isStepComplete("cv-screening") && (
+                    <div className={styles.aiQuestionsValidation} role="alert" style={{ marginBottom: 20 }}>
+                      <span className={styles.aiQuestionsValidationIcon} aria-hidden="true">
+                        <i className="la la-exclamation-triangle"></i>
+                      </span>
+                      <span>
+                        {(() => {
+                          const missingDescription = !isDescriptionPresent(draft.description);
+                          const missingQuestions = preScreeningQuestions.length === 0 || !preScreeningQuestions.some((q: any) => typeof q?.question === "string" && q.question.trim().length > 0);
+                          if (missingDescription && missingQuestions) {
+                            return "Add a job description and at least one pre-screening question.";
+                          }
+                          if (missingDescription) {
+                            return "Add a job description to continue.";
+                          }
+                          if (missingQuestions) {
+                            return "Add at least one pre-screening question.";
+                          }
+                          return "Please complete required fields.";
+                        })()}
+                      </span>
+                    </div>
+                  )}
                   <div className={styles.inlineField}>
                     <label
                       style={{
@@ -2218,72 +3775,15 @@ export default function SegmentedCareerForm({
                       onSelectSetting={(value: string) => updateDraft({ screeningSetting: value })}
                     />
                   </div>
-                  <div className={styles.inlineField}>
-                    <label
-                      htmlFor="cvSecretPrompt"
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        fontSize: "16px",
-                        fontWeight: 700,
-                        color: "#111827",
-                        marginBottom: "8px",
-                      }}
-                    >
-                      <span
-                        aria-hidden="true"
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          width: "28px",
-                          height: "28px",
-                          borderRadius: "50%",
-                          background: "linear-gradient(135deg, #f9a8d4, #c4b5fd, #93c5fd)",
-                          color: "#ffffff",
-                          fontSize: "16px",
-                        }}
-                      >
-                        <i className="la la-magic"></i>
-                      </span>
-                      <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        CV Secret Prompt
-                        <span style={{ fontSize: "14px", fontWeight: 500, color: "#6b7280" }}>
-                          (optional)
-                        </span>
-                      </span>
-                      <i
-                        className="la la-question-circle"
-                        aria-hidden="true"
-                        style={{ fontSize: "18px", color: "#9ca3af", marginLeft: "auto" }}
-                      ></i>
-                    </label>
-                    <p
-                      id="cvSecretPromptDescription"
-                      style={{
-                        margin: "0 0 12px 0",
-                        fontSize: "14px",
-                        lineHeight: "20px",
-                        color: "#4b5563",
-                      }}
-                    >
-                      Secret prompts give you extra control over Jia's evaluation style, complementing her
-                      assessment of requirements from the job description.
-                    </p>
-                    <textarea
-                      id="cvSecretPrompt"
-                      aria-describedby="cvSecretPromptDescription"
-                      value={draft.cvSecretPrompt || ""}
-                      placeholder="Enter a secret prompt (e.g. Give higher fit scores to candidates who participate in hackathons or competitions.)"
-                      onChange={(event) =>
-                        updateDraft({
-                          cvSecretPrompt: event.target.value,
-                        })
-                      }
-                      rows={5}
-                    />
-                  </div>
+                  <SecretPromptField
+                    inputId={secretPromptFieldIds.cv.input}
+                    descriptionId={secretPromptFieldIds.cv.description}
+                    label="CV Secret Prompt"
+                    helper="Secret prompts fine-tune how Jia reviews resumes before recommending candidates."
+                    placeholder="Enter a CV secret prompt (e.g. Emphasize candidates with product-led growth experience in SaaS)."
+                    value={draft.cvSecretPrompt || ""}
+                    onChange={(nextValue) => updateDraft({ cvSecretPrompt: nextValue })}
+                  />
                 </div>
               </div>
 
@@ -3050,53 +4550,278 @@ export default function SegmentedCareerForm({
           )}
 
           {activeStep === "ai-setup" && (
-            <div className={styles.card}>
-              <header className={styles.cardHeader}>
-                <span className={styles.icon}>
-                  <i className="la la-robot"></i>
-                </span>
-                <div className={styles.titleGroup}>
-                  <strong>AI interview setup</strong>
-                  <span>Review the generated structure</span>
-                </div>
-              </header>
-              <div className={styles.cardInner}>
-                <div className={styles.reviewGrid}>
-                  <div className={styles.reviewCard}>
-                    <h4>Interview categories</h4>
-                    <ul className={styles.summaryList}>
-                      {questions.map((group) => (
-                        <li key={group.id}>
-                          <span className={styles.summaryLabel}>{group.category}</span>
-                          <span>
-                            {group.questions?.length
-                              ? `${group.questions.length} question(s)`
-                              : "No questions yet"}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
+            <>
+              <div className={styles.card}>
+                <header className={classNames(styles.cardHeader, styles.aiCardHeader)}>
+                  <div className={styles.aiCardHeaderLeft}>
+                    <div className={styles.aiCardBadge}>1</div>
+                    <div className={styles.titleGroup}>
+                      <strong>AI Interview Settings</strong>
+                      <span>Guide Jia’s live interview experience.</span>
+                    </div>
                   </div>
-                  <div className={styles.reviewCard}>
-                    <h4>Resume requirements</h4>
-                    <p className={styles.resumeNotice}>
-                      Applicants upload a PDF resume. Jia validates key claims against your
-                      job description.
-                    </p>
-                  </div>
+                </header>
+                <div className={classNames(styles.cardInner, styles.aiSettingsInner)}>
+                  <section className={styles.aiSettingSection}>
+                    <div className={styles.aiSettingHeading}>
+                      <h3>AI Interview Screening</h3>
+                      <p>Jia automatically endorses candidates who meet the chosen criteria.</p>
+                    </div>
+                    <div className={styles.aiSettingControl}>
+                      <CustomDropdown
+                        screeningSetting={draft.screeningSetting}
+                        settingList={SCREENING_SETTING_OPTIONS}
+                        placeholder="Select screening setting"
+                        onSelectSetting={(value: string) => updateDraft({ screeningSetting: value })}
+                      />
+                    </div>
+                  </section>
+
+                  <div className={styles.aiSettingDivider} aria-hidden="true"></div>
+
+                  <section className={classNames(styles.aiSettingSection, styles.requireVideoSection)}>
+                    <div className={styles.aiSettingHeading}>
+                      <h3>Require Video on Interview</h3>
+                      <p>
+                        Require candidates to keep their camera on. Recordings will appear on their
+                        analysis page.
+                      </p>
+                    </div>
+                    <div className={styles.requireVideoToggleRow}>
+                      <div className={styles.requireVideoLabel}>
+                        <span className={styles.requireVideoIcon} aria-hidden="true">
+                          <i className="la la-video"></i>
+                        </span>
+                        <span>Require Video Interview</span>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={requireVideoSetting}
+                        onClick={() => updateDraft({ requireVideo: !requireVideoSetting })}
+                        className={classNames(styles.toggle, requireVideoSetting && styles.toggleOn)}
+                      >
+                        <span className={styles.toggleThumb}></span>
+                      </button>
+                      <span className={styles.toggleValue}>{requireVideoSetting ? "Yes" : "No"}</span>
+                    </div>
+                  </section>
+
+                  <SecretPromptField
+                    inputId={secretPromptFieldIds.ai.input}
+                    descriptionId={secretPromptFieldIds.ai.description}
+                    label="AI Interview Secret Prompt"
+                    helper="Shape Jia's interview scoring focus; this prompt does not affect CV screening."
+                    placeholder="Enter an interview secret prompt (e.g. Highlight storytelling around client impact and coaching experience)."
+                    value={draft.aiInterviewSecretPrompt || ""}
+                    onChange={(nextValue) => updateDraft({ aiInterviewSecretPrompt: nextValue })}
+                    withDivider
+                    iconSrc="/assets/icons/ai-sparkles.svg"
+                    iconAlt="AI Secret Prompt"
+                  />
                 </div>
-                <footer className={styles.stepFooter}>
-                  <button className={styles.backButton} onClick={goToPreviousStep}>
-                    <i className="la la-arrow-left"></i>
-                    Back to CV review
-                  </button>
-                  <button className={styles.nextButton} onClick={goToNextStep}>
-                    Continue to pipeline
-                    <i className="la la-arrow-right"></i>
-                  </button>
-                </footer>
               </div>
-            </div>
+
+              <div className={styles.card}>
+                <header className={classNames(styles.cardHeader, styles.aiCardHeader)}>
+                  <div className={styles.aiCardHeaderLeft}>
+                    <div className={styles.aiCardBadge}>2</div>
+                    <div className={styles.titleGroup}>
+                      <strong>AI Interview Questions</strong>
+                      <span>Create and manage Jia’s interview prompts.</span>
+                    </div>
+                  </div>
+                  <div className={styles.aiCardHeaderRight}>
+                    <span className={styles.aiQuestionsCounter} aria-live="polite">
+                      {totalInterviewQuestionCount}
+                    </span>
+                    <button
+                      type="button"
+                      className={styles.aiQuestionsGenerateAll}
+                      onClick={handleGenerateAllInterviewQuestions}
+                      disabled={isGeneratingQuestions}
+                    >
+                      <i className="la la-sparkles" aria-hidden="true"></i>
+                      {pendingQuestionGeneration === "all" ? "Generating..." : "Generate all questions"}
+                    </button>
+                  </div>
+                </header>
+                <div className={styles.aiQuestionsBody}>
+                  {showAiQuestionValidation && (
+                    <div className={styles.aiQuestionsValidation} role="alert">
+                      <span className={styles.aiQuestionsValidationIcon} aria-hidden="true">
+                        <i className="la la-exclamation-triangle"></i>
+                      </span>
+                      <span>Please add at least 5 interview questions.</span>
+                    </div>
+                  )}
+                  <div className={styles.aiQuestionsList} aria-label="AI interview question controls">
+                        {questions.map((group) => {
+                          const groupQuestions = Array.isArray(group.questions)
+                            ? group.questions.filter((question: any) => isInterviewQuestion(question))
+                            : [];
+                          const tailZoneActive =
+                            Boolean(draggingInterviewQuestionId) &&
+                            activeDragInterviewGroupId === group.id;
+                          const tailZoneStyle: CSSProperties = {
+                            height: tailZoneActive ? 36 : 0,
+                            marginTop: tailZoneActive ? 12 : 0,
+                            opacity: tailZoneActive ? 1 : 0,
+                            pointerEvents: tailZoneActive ? "auto" : "none",
+                          };
+
+                          return (
+                            <div className={styles.aiQuestionsRow} key={group.id}>
+                              <div className={styles.aiQuestionRowHeader}>
+                                <div className={styles.aiQuestionCategory}>
+                                  <span>{group.category}</span>
+                                </div>
+                              </div>
+                              {groupQuestions.length > 0 ? (
+                                <div className={styles.aiQuestionList}>
+                                  {groupQuestions.map((question: any, index: number) => {
+                                    const questionId = question?.id ?? `ai-question-${group.id}-${index}`;
+                                    const questionText =
+                                      typeof question?.question === "string"
+                                        ? question.question
+                                        : "";
+                                        const isDragging = draggingInterviewQuestionId === questionId;
+                                        const isDragOver = dragOverInterviewQuestionId === questionId && draggingInterviewQuestionId !== questionId;
+
+                                    return (
+                                          <div
+                                            className={classNames(styles.aiQuestionListItem, {
+                                              [styles.questionCardDragging]: isDragging,
+                                              [styles.questionCardDragOver]: isDragOver,
+                                            })}
+                                            key={questionId}
+                                            draggable={isDragging}
+                                            onDragEnter={(e) => handleInterviewDragEnter(e, questionId)}
+                                            onDragOver={(e) => handleInterviewDragOver(e, questionId)}
+                                            onDragLeave={() => handleInterviewDragLeave(questionId)}
+                                            onDrop={(e) => handleInterviewDrop(e, questionId)}
+                                            onDragEnd={handleInterviewDragEnd}
+                                          >
+                                            <button
+                                              type="button"
+                                              className={styles.dragHandleButton}
+                                              aria-label="Drag to reorder interview question"
+                                              aria-grabbed={isDragging}
+                                              draggable
+                                              onDragStart={(e) => handleInterviewDragStart(e, questionId, group.id)}
+                                            >
+                                              <span className={styles.dragHandleDots} aria-hidden="true">
+                                                <span className={styles.dragHandleDot}></span>
+                                                <span className={styles.dragHandleDot}></span>
+                                                <span className={styles.dragHandleDot}></span>
+                                                <span className={styles.dragHandleDot}></span>
+                                                <span className={styles.dragHandleDot}></span>
+                                                <span className={styles.dragHandleDot}></span>
+                                              </span>
+                                            </button>
+                                            <div className={styles.aiQuestionListContent}>
+                                              <span aria-label="Interview question">{questionText}</span>
+                                            </div>
+                                            <div className={styles.aiQuestionListActions}>
+                                              <button
+                                                type="button"
+                                                className={styles.aiQuestionListButton}
+                                                onClick={() =>
+                                                  openQuestionModal("edit", group.id, {
+                                                    id: questionId,
+                                                    question: questionText,
+                                                  })
+                                                }
+                                                aria-label="Edit interview question"
+                                              >
+                                                <i className="la la-edit" aria-hidden="true"></i>
+                                              </button>
+                                              <button
+                                                type="button"
+                                                className={styles.aiQuestionListButton}
+                                                onClick={() =>
+                                                  openQuestionModal("delete", group.id, {
+                                                    id: questionId,
+                                                    question: questionText,
+                                                  })
+                                                }
+                                                aria-label="Delete interview question"
+                                              >
+                                                <i className="la la-trash-alt" aria-hidden="true"></i>
+                                              </button>
+                                            </div>
+                                          </div>
+                                    );
+                                  })}
+                                  <div
+                                    className={classNames(styles.dragTailZone, {
+                                      [styles.dragTailZoneActive]: interviewTailHoverGroupId === group.id,
+                                    })}
+                                    style={tailZoneStyle}
+                                    onDragOver={(event) => handleInterviewTailDragOver(event, group.id)}
+                                    onDragLeave={() => handleInterviewTailDragLeave(group.id)}
+                                    onDrop={(event) => handleInterviewTailDrop(event, group.id)}
+                                    aria-label="Drop to move question to the end of this category"
+                                  ></div>
+                                </div>
+                              ) : (
+                                <>
+                                  <div className={styles.aiQuestionEmpty}>
+                                    <i className="la la-info-circle" aria-hidden="true"></i>
+                                    <span>No questions added yet.</span>
+                                  </div>
+                                  <div
+                                    className={classNames(styles.dragTailZone, {
+                                      [styles.dragTailZoneActive]: interviewTailHoverGroupId === group.id,
+                                    })}
+                                    style={tailZoneStyle}
+                                    onDragOver={(event) => handleInterviewTailDragOver(event, group.id)}
+                                    onDragLeave={() => handleInterviewTailDragLeave(group.id)}
+                                    onDrop={(event) => handleInterviewTailDrop(event, group.id)}
+                                    aria-label="Drop to move question to this category"
+                                  ></div>
+                                </>
+                              )}
+                              <div className={styles.aiQuestionActions}>
+                                <div className={styles.aiQuestionActionsButtons}>
+                                  <button
+                                    type="button"
+                                    className={styles.aiQuestionPrimary}
+                                    onClick={() => handleGenerateQuestionsForCategory(group.category)}
+                                    disabled={isGeneratingQuestions}
+                                  >
+                                    <i className="la la-sparkles" aria-hidden="true"></i>
+                                    {pendingQuestionGeneration === group.category
+                                      ? "Generating..."
+                                      : "Generate questions"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={styles.aiQuestionSecondary}
+                                    onClick={() => openQuestionModal("add", group.id)}
+                                    disabled={isGeneratingQuestions}
+                                  >
+                                    <i className="la la-plus" aria-hidden="true"></i>
+                                    Manually add
+                                  </button>
+                                </div>
+                                <div className={styles.aiQuestionCounterGroup}>
+                                  <span className={styles.aiQuestionCounterLabel}># of questions to ask</span>
+                                  <span
+                                    className={styles.aiQuestionCounterValue}
+                                    aria-live="polite"
+                                  >
+                                    {groupQuestions.length}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                  </div>
+                </div>
+              </div>
+            </>
           )}
 
           {activeStep === "pipeline" && (
@@ -3136,87 +4861,45 @@ export default function SegmentedCareerForm({
           )}
 
           {activeStep === "review" && (
-            <div className={styles.card}>
-              <header className={styles.cardHeader}>
-                <span className={styles.icon}>
-                  <i className="la la-clipboard-check"></i>
-                </span>
-                <div className={styles.titleGroup}>
-                  <strong>Review career</strong>
-                  <span>Preview the key details before publishing</span>
-                </div>
-              </header>
-              <div className={styles.cardInner}>
-                <div className={styles.reviewGrid}>
-                  <div className={styles.reviewCard}>
-                    <h4>Career summary</h4>
-                    <ul className={styles.summaryList}>
-                      <li>
-                        <span className={styles.summaryLabel}>Job title</span>
-                        <span>{draft.jobTitle || "—"}</span>
-                      </li>
-                      <li>
-                        <span className={styles.summaryLabel}>Employment type</span>
-                        <span>{draft.employmentType || "—"}</span>
-                      </li>
-                      <li>
-                        <span className={styles.summaryLabel}>Arrangement</span>
-                        <span>{draft.workSetup || "—"}</span>
-                      </li>
-                      <li>
-                        <span className={styles.summaryLabel}>Location</span>
-                        <span>
-                          {[draft.location.city, draft.location.province, draft.location.country]
-                            .filter(Boolean)
-                            .join(", ") || "—"}
-                        </span>
-                      </li>
-                    </ul>
-                  </div>
-                  <div className={styles.reviewCard}>
-                    <h4>Salary</h4>
-                    <ul className={styles.summaryList}>
-                      <li>
-                        <span className={styles.summaryLabel}>Negotiable</span>
-                        <span>{draft.salary.isNegotiable ? "Yes" : "No"}</span>
-                      </li>
-                      <li>
-                        <span className={styles.summaryLabel}>Currency</span>
-                        <span>{selectedCurrency}</span>
-                      </li>
-                      <li>
-                        <span className={styles.summaryLabel}>Minimum</span>
-                        <span>{formatSalaryValue(draft.salary.minimum)}</span>
-                      </li>
-                      <li>
-                        <span className={styles.summaryLabel}>Maximum</span>
-                        <span>{formatSalaryValue(draft.salary.maximum)}</span>
-                      </li>
-                    </ul>
-                  </div>
-                  <div className={styles.reviewCard}>
-                    <h4>Team access</h4>
-                    <ul className={styles.summaryList}>
-                      {teamMembers.map((member: any) => (
-                        <li key={member.memberId}>
-                          <span className={styles.summaryLabel}>{member.name}</span>
-                          <span>
-                            {MEMBER_ROLE_OPTIONS.find((option) => option.value === member.role)?.label ||
-                              member.role}
+            <div className={styles.reviewStandaloneContainer}>
+              <div className={styles.reviewAccordion}>
+                {reviewSections.map((section) => {
+                  const isOpen = expandedReviewSections[section.key];
+                  return (
+                    <div
+                      key={section.key}
+                      className={classNames(styles.reviewAccordionItem, {
+                        [styles.reviewAccordionItemOpen]: isOpen,
+                      })}
+                    >
+                      <button
+                        type="button"
+                        className={classNames(styles.reviewAccordionHeader, {
+                          [styles.reviewAccordionHeaderOpen]: isOpen,
+                        })}
+                        onClick={() => toggleReviewSection(section.key)}
+                        aria-expanded={isOpen}
+                      >
+                        <div className={styles.reviewAccordionHeaderLeft}>
+                          <span className={styles.reviewAccordionTitle}>{section.title}</span>
+                          <span className={styles.reviewAccordionSubtitle}>{section.subtitle}</span>
+                        </div>
+                        <div className={styles.reviewAccordionHeaderRight}>
+                          <span className={styles.reviewAccordionMeta}>{section.meta}</span>
+                          <span className={styles.reviewAccordionIcon} aria-hidden="true">
+                            <i
+                              className={classNames("la", isOpen ? "la-angle-up" : "la-angle-down")}
+                            ></i>
                           </span>
-                        </li>
-                      ))}
-                      {!teamMembers.length && <span>No team members assigned yet.</span>}
-                    </ul>
-                  </div>
-                </div>
-                <div className={styles.sectionHeading}>Description preview</div>
-                <div className={styles.descriptionPreview}>
-                  {isDescriptionPresent(draft.description)
-                    ? draft.description.replace(/<[^>]+>/g, " ").trim()
-                    : "No description provided."}
-                </div>
-                <footer className={styles.stepFooter}>
+                        </div>
+                      </button>
+                      {isOpen && section.render()}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className={styles.reviewFooterCard}>
+                <footer className={classNames(styles.stepFooter, styles.reviewFooter)}>
                   <button className={styles.backButton} onClick={goToPreviousStep}>
                     <i className="la la-arrow-left"></i>
                     Back
@@ -3331,6 +5014,15 @@ export default function SegmentedCareerForm({
           </div>
         </aside>
       </div>
+
+      {questionModalState.action && questionModalState.groupId !== null && (
+        <InterviewQuestionModal
+          groupId={questionModalState.groupId}
+          questionToEdit={questionModalState.questionToEdit}
+          action={questionModalState.action}
+          onAction={handleQuestionModalAction}
+        />
+      )}
 
       {showSaveModal && (
         <CareerActionModal

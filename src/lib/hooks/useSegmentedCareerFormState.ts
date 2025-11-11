@@ -27,10 +27,12 @@ export interface CareerFormDraft {
   jobTitle: string;
   description: string;
   screeningSetting: string;
+  requireVideo: boolean;
   employmentType: string;
   workSetup: string;
   workSetupRemarks: string;
   cvSecretPrompt: string;
+  aiInterviewSecretPrompt: string;
   salary: {
     isNegotiable: boolean;
     minimum: string;
@@ -131,10 +133,12 @@ export const defaultCareerDraft: CareerFormDraft = {
   jobTitle: "",
   description: "",
   screeningSetting: "Good Fit and above",
+  requireVideo: true,
   employmentType: "",
   workSetup: "",
   workSetupRemarks: "",
   cvSecretPrompt: "",
+  aiInterviewSecretPrompt: "",
   salary: {
     isNegotiable: true,
     minimum: "",
@@ -227,10 +231,16 @@ export default function useSegmentedCareerFormState() {
         jobTitle: career.jobTitle || "",
         description: career.description || "",
         screeningSetting: career.screeningSetting || "Good Fit and above",
+        requireVideo:
+          typeof career.requireVideo === "boolean" ? career.requireVideo : true,
         employmentType: career.employmentType || "",
         workSetup: career.workSetup || "",
         workSetupRemarks: career.workSetupRemarks || "",
         cvSecretPrompt: typeof career.cvSecretPrompt === "string" ? career.cvSecretPrompt : "",
+        aiInterviewSecretPrompt:
+          typeof career.aiInterviewSecretPrompt === "string"
+            ? career.aiInterviewSecretPrompt
+            : "",
         salary: {
           isNegotiable:
             typeof career.salaryNegotiable === "boolean"
