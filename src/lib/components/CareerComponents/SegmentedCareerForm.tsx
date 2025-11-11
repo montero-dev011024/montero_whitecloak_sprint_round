@@ -2679,40 +2679,6 @@ export default function SegmentedCareerForm({
       return;
     }
 
-    if (status === "active") {
-      if (!isStepComplete("career-details")) {
-        setActiveStep("career-details");
-        setShowCareerDetailsErrors(true);
-        return;
-      }
-
-      if (!isStepComplete("cv-screening")) {
-        const alreadyOnScreeningStep = activeStep === "cv-screening";
-
-        setActiveStep("cv-screening");
-        setShowCvScreeningValidation(true);
-        return;
-      }
-
-      if (!isStepComplete("ai-setup")) {
-        const alreadyOnAiStep = activeStep === "ai-setup";
-
-        setActiveStep("ai-setup");
-        if (alreadyOnAiStep) {
-          setShowAiQuestionValidation(true);
-        } else {
-          setShowAiQuestionValidation(false);
-        }
-
-        return;
-      }
-
-      if (isOnReviewStep || currentStepIndex === segmentedSteps.length - 1) {
-        setShowSaveModal(status);
-        return;
-      }
-    }
-
     const payload = formatCareerPayload(status);
     if (
       payload.minimumSalary !== null &&
@@ -2724,6 +2690,25 @@ export default function SegmentedCareerForm({
     }
 
     if (status === "active") {
+      // On review step, validate all required steps before publishing
+      if (isOnReviewStep || currentStepIndex === segmentedSteps.length - 1) {
+        if (!isStepComplete("career-details")) {
+          setActiveStep("career-details");
+          setShowCareerDetailsErrors(true);
+          return;
+        }
+
+        if (!isStepComplete("ai-setup")) {
+          setActiveStep("ai-setup");
+          setShowAiQuestionValidation(true);
+          return;
+        }
+
+        setShowSaveModal(status);
+        return;
+      }
+
+      // Otherwise just go to next step sequentially
       goToNextStep();
       return;
     }
