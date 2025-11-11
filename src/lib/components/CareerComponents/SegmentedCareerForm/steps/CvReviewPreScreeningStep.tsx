@@ -419,9 +419,10 @@ const CvReviewPreScreeningStep = ({
                         <button
                           id={typeButtonId}
                           type="button"
-                          onClick={() =>
-                            setOpenPreScreenTypeFor((current) => (current === item.id ? null : item.id))
-                          }
+                          onClick={() => {
+                            const current = openPreScreenTypeFor;
+                            setOpenPreScreenTypeFor(current === item.id ? null : item.id);
+                          }}
                           aria-haspopup="listbox"
                           aria-expanded={isTypeMenuOpen}
                           aria-controls={typeMenuId}
