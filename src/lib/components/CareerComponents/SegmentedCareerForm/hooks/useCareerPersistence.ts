@@ -1,2 +1,2 @@
-export { default } from "./useCareerPersistence.tsx";
+export { default } from "./useCareerPersistence";
 

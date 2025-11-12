@@ -1,1 +1,1 @@
-export { default } from "./useQuestionGeneration.tsx";
+export { default } from "./useQuestionGeneration";

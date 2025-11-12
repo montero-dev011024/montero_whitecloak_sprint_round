@@ -1,1 +1,1 @@
-export { default } from "./useReviewSections.tsx";
+export { default } from "./useReviewSections";
