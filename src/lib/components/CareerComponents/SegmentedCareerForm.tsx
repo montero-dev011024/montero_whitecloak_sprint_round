@@ -2,7 +2,6 @@
 
 import {
   CSSProperties,
-  DragEvent,
   MutableRefObject,
   ReactNode,
   useEffect,
@@ -19,7 +18,6 @@ import styles from "@/lib/styles/segmentedCareerForm.module.scss";
 import {
   candidateActionToast,
   errorToast,
-  guid,
   interviewQuestionCategoryMap,
 } from "@/lib/Utils";
 import { useAppContext } from "@/lib/context/AppContext";
@@ -44,11 +42,13 @@ import ReviewAiSection from "./SegmentedCareerForm/components/ReviewAiSection";
 import FormTipsSidebar from "./SegmentedCareerForm/components/FormTipsSidebar";
 import useSalaryFormatting from "./SegmentedCareerForm/hooks/useSalaryFormatting";
 import useFormValidation from "./SegmentedCareerForm/hooks/useFormValidation";
+import useQuestionManagement from "./SegmentedCareerForm/hooks/useQuestionManagement";
+import {
+  isInterviewQuestion,
+  normalizeQuestionGroups,
+} from "./SegmentedCareerForm/utils/questionUtils";
 import {
   INTERVIEW_QUESTION_COUNT,
-  PreScreenQuestionType,
-  QUESTION_ORIGIN,
-  QuestionOrigin,
   SCREENING_SETTING_OPTIONS,
   SEGMENTED_DRAFT_STORAGE_KEY,
   SUGGESTED_PRE_SCREENING_QUESTIONS,
@@ -58,105 +58,6 @@ import {
 } from "./SegmentedCareerForm/constants";
 import CvReviewPreScreeningStep from "./SegmentedCareerForm/steps/CvReviewPreScreeningStep";
 import AiInterviewSetupStep from "./SegmentedCareerForm/steps/AiInterviewSetupStep";
-
-type QuestionModalAction = "" | "add" | "edit" | "delete";
-
-interface QuestionModalState {
-  action: QuestionModalAction;
-  groupId: number | null;
-  questionToEdit?: { id: string | number; question: string };
-}
-
-// Identify whether a persisted question belongs to the pre-screening or interview buckets.
-const resolveQuestionOrigin = (question: any): QuestionOrigin => {
-  const declaredOrigin = typeof question?.origin === "string" ? question.origin : "";
-  if (
-    declaredOrigin === QUESTION_ORIGIN.PRE_SCREEN ||
-    declaredOrigin === QUESTION_ORIGIN.INTERVIEW
-  ) {
-    return declaredOrigin;
-  }
-
-  if (
-    typeof question?.answerType === "string" ||
-    Array.isArray(question?.options) ||
-    typeof question?.rangeMin === "string" ||
-    typeof question?.rangeMax === "string"
-  ) {
-    return QUESTION_ORIGIN.PRE_SCREEN;
-  }
-
-  return QUESTION_ORIGIN.INTERVIEW;
-};
-
-const normalizeQuestionEntry = (question: any) => {
-  const origin = resolveQuestionOrigin(question);
-  const questionId =
-    question && question.id !== undefined && question.id !== null && question.id !== ""
-      ? question.id
-      : guid();
-
-  const normalized: any = {
-    ...question,
-    id: questionId,
-    origin,
-  };
-
-  if (origin === QUESTION_ORIGIN.PRE_SCREEN) {
-    normalized.answerType =
-      typeof question?.answerType === "string" ? question.answerType : "short_text";
-    normalized.options = Array.isArray(question?.options)
-      ? question.options.map((option: any) => ({ ...option }))
-      : [];
-    normalized.rangeMin = typeof question?.rangeMin === "string" ? question.rangeMin : "";
-    normalized.rangeMax = typeof question?.rangeMax === "string" ? question.rangeMax : "";
-  } else {
-    if (Array.isArray(question?.options) && question.options.length) {
-      normalized.options = question.options.map((option: any) => ({ ...option }));
-    } else {
-      delete normalized.options;
-    }
-    delete normalized.answerType;
-    delete normalized.rangeMin;
-    delete normalized.rangeMax;
-  }
-
-  if (typeof normalized.question !== "string" || normalized.question.trim().length === 0) {
-    if (typeof question?.text === "string") {
-      normalized.question = question.text;
-    } else if (typeof question?.prompt === "string") {
-      normalized.question = question.prompt;
-    }
-  }
-
-  return normalized;
-};
-
-const normalizeQuestionGroups = (groups?: QuestionGroup[]): QuestionGroup[] => {
-  const sourceGroups =
-    Array.isArray(groups) && groups.length ? groups : createDefaultQuestionGroups();
-
-  return sourceGroups.map((group) => ({
-    ...group,
-    questions: Array.isArray(group.questions)
-      ? group.questions.map((question: any) => normalizeQuestionEntry(question))
-      : [],
-  }));
-};
-
-const isPreScreenQuestion = (question: any) =>
-  resolveQuestionOrigin(question) === QUESTION_ORIGIN.PRE_SCREEN;
-
-const isInterviewQuestion = (question: any) =>
-  resolveQuestionOrigin(question) === QUESTION_ORIGIN.INTERVIEW;
-
-const cloneQuestionGroups = (groups: QuestionGroup[]): QuestionGroup[] =>
-  groups.map((group) => ({
-    ...group,
-    questions: Array.isArray(group.questions)
-      ? group.questions.map((question: any) => normalizeQuestionEntry(question))
-      : [],
-  }));
 
 const RichTextEditor = dynamic(
   () => import("@/lib/components/CareerComponents/RichTextEditor"),
@@ -220,29 +121,8 @@ export default function SegmentedCareerForm({
         : createDefaultQuestionGroups()
     )
   );
-  const preScreeningGroup = useMemo(
-    () => (questions.length > 0 ? questions[0] : undefined),
-    [questions]
-  );
-  const preScreeningQuestions = useMemo(
-    () =>
-      preScreeningGroup && Array.isArray(preScreeningGroup.questions)
-        ? preScreeningGroup.questions.filter((question: any) => isPreScreenQuestion(question))
-        : [],
-    [preScreeningGroup]
-  );
   const [questionGenPrompt, setQuestionGenPrompt] = useState("");
   const [pendingQuestionGeneration, setPendingQuestionGeneration] = useState<string | null>(null);
-  const [questionModalState, setQuestionModalState] = useState<QuestionModalState>({
-    action: "",
-    groupId: null,
-    questionToEdit: undefined,
-  });
-  // Drag state for interview questions
-  const [draggingInterviewQuestionId, setDraggingInterviewQuestionId] = useState<string | null>(null);
-  const [dragOverInterviewQuestionId, setDragOverInterviewQuestionId] = useState<string | null>(null);
-  const [activeDragInterviewGroupId, setActiveDragInterviewGroupId] = useState<number | null>(null);
-  const [interviewTailHoverGroupId, setInterviewTailHoverGroupId] = useState<number | null>(null);
   const [showCvScreeningValidation, setShowCvScreeningValidation] = useState(false);
   const [showAiQuestionValidation, setShowAiQuestionValidation] = useState(false);
   const [expandedReviewSections, setExpandedReviewSections] = useState<Record<ReviewSectionKey, boolean>>({
@@ -250,34 +130,8 @@ export default function SegmentedCareerForm({
     cv: true,
     ai: true,
   });
-  const totalInterviewQuestionCount = useMemo(
-    () =>
-      questions.reduce((total, group) => {
-        const groupQuestions = Array.isArray(group.questions) ? group.questions : [];
-        return total + groupQuestions.filter((question: any) => isInterviewQuestion(question)).length;
-      }, 0),
-    [questions]
-  );
-  const interviewQuestionGroups = useMemo(
-    () =>
-      questions.map((group) => ({
-        id: group.id,
-        category: group.category,
-        interviewQuestions: Array.isArray(group.questions)
-          ? group.questions.filter((question: any) => isInterviewQuestion(question))
-          : [],
-      })),
-    [questions]
-  );
   const isGeneratingQuestions = pendingQuestionGeneration !== null;
   const isOnReviewStep = activeStep === "review";
-
-  // Clear the AI validation banner once the minimum question requirement has been satisfied.
-  useEffect(() => {
-    if (totalInterviewQuestionCount >= 5 && showAiQuestionValidation) {
-      setShowAiQuestionValidation(false);
-    }
-  }, [totalInterviewQuestionCount, showAiQuestionValidation]);
 
   // Remove the CV review warning as soon as the step becomes valid again.
   useEffect(() => {
@@ -331,414 +185,113 @@ export default function SegmentedCareerForm({
   const jobDescriptionMarkup = isDescriptionPresent(draft.description)
     ? { __html: draft.description }
     : null;
-  // Normalization helpers keep duplicate detection and grouping deterministic.
-  const normalizeQuestionText = (value: string) => value.trim().toLowerCase();
-  const normalizeCategoryName = (value: string) =>
-    value
-      .toLowerCase()
-      .replace(/\s*\/\s*/g, " / ")
-      .replace(/\s+/g, " ")
-      .trim();
-  // Pull the display text out of a question object or string, accommodating legacy shapes.
-  const extractQuestionText = (entry: unknown): string => {
-    if (typeof entry === "string") {
-      return entry.trim();
+
+  const [openPreScreenTypeFor, setOpenPreScreenTypeFor] = useState<string | null>(null);
+  const {
+    preScreeningQuestions,
+    interviewQuestionGroups,
+    activeDragQuestionId,
+    setActiveDragQuestionId,
+    draggingQuestionId,
+    setDraggingQuestionId,
+    dragOverQuestionId,
+    setDragOverQuestionId,
+    isDragOverTail,
+    setIsDragOverTail,
+    handleAddPreScreenQuestion,
+    handleRemovePreScreenQuestion,
+    handleUpdatePreScreenQuestion,
+    handleReorderPreScreenQuestions,
+    handlePreScreenDragStart,
+    handlePreScreenDragOver,
+    handlePreScreenDrop,
+    handlePreScreenDragLeave,
+    handlePreScreenDragEnd,
+    handleUpdatePreScreenRange,
+    handleAddPreScreenOption,
+    handleUpdatePreScreenOption,
+    handleRemovePreScreenOption,
+    handleAddCustomPreScreenQuestion,
+    draggingInterviewQuestionId,
+    setDraggingInterviewQuestionId,
+    dragOverInterviewQuestionId,
+    setDragOverInterviewQuestionId,
+    activeDragInterviewGroupId,
+    setActiveDragInterviewGroupId,
+    interviewTailHoverGroupId,
+    setInterviewTailHoverGroupId,
+    handleReorderInterviewQuestions,
+    handleInterviewDragStart,
+    handleInterviewDragEnter,
+    handleInterviewDragOver,
+    handleInterviewDragLeave,
+    handleInterviewDrop,
+    handleInterviewDragEnd,
+    handleInterviewTailDragOver,
+    handleInterviewTailDragLeave,
+    handleInterviewTailDrop,
+    addInterviewQuestionToGroup,
+    updateInterviewQuestionInGroup,
+    removeInterviewQuestionFromGroup,
+    integrateGeneratedQuestions,
+    parseGeneratedQuestionPayload,
+    questionModalState,
+    openQuestionModal,
+    closeQuestionModal,
+    handleQuestionModalAction,
+  } = useQuestionManagement({
+    questions,
+    setQuestions,
+    setOpenPreScreenTypeFor,
+  });
+  const totalInterviewQuestionCount = useMemo(
+    () =>
+      interviewQuestionGroups.reduce(
+        (total, group) => total + group.interviewQuestions.length,
+        0
+      ),
+    [interviewQuestionGroups]
+  );
+  // Clear the AI validation banner once the minimum question requirement has been satisfied.
+  useEffect(() => {
+    if (totalInterviewQuestionCount >= 5 && showAiQuestionValidation) {
+      setShowAiQuestionValidation(false);
     }
-
-    if (entry && typeof entry === "object") {
-      const candidate = entry as Record<string, unknown>;
-
-      if (typeof candidate.question === "string") {
-        return candidate.question.trim();
-      }
-
-      if (typeof candidate.text === "string") {
-        return candidate.text.trim();
-      }
-
-      if (typeof candidate.prompt === "string") {
-        return candidate.prompt.trim();
-      }
-
-      const stringValue = Object.values(candidate).find((value) => typeof value === "string");
-      if (typeof stringValue === "string") {
-        return stringValue.trim();
-      }
-    }
-
-    return "";
-  };
-  // Keeps "questionCountToAsk" aligned with the count of interview questions to avoid impossible
-  // configurations when recruiters delete items.
-  const ensureQuestionCountWithinBounds = (group: QuestionGroup) => {
-    if (typeof group.questionCountToAsk !== "number") {
+  }, [totalInterviewQuestionCount, showAiQuestionValidation]);
+  useEffect(() => {
+    if (!openPreScreenTypeFor) {
       return;
     }
 
-    const interviewCount = Array.isArray(group.questions)
-      ? group.questions.filter((question: any) => isInterviewQuestion(question)).length
-      : 0;
-
-    if (group.questionCountToAsk > interviewCount) {
-      group.questionCountToAsk = interviewCount;
-    }
-  };
-  const parseGeneratedQuestionPayload = (
-    raw: unknown,
-    categoryContext?: string | string[]
-  ) => {
-    if (!raw) {
-      throw new Error("Empty response from question generator");
-    }
-
-    if (typeof raw === "string") {
-      const sanitized = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
-      if (!sanitized) {
-        throw new Error("Unable to parse generated questions");
-      }
-
-      try {
-        return JSON.parse(sanitized);
-      } catch (error) {
-        // Attempt to extract inline JSON payloads from conversational responses
-        const extractAndParseJSON = (value: string) => {
-          const openingTokens: Array<{ open: string; close: string }> = [
-            { open: "[", close: "]" },
-            { open: "{", close: "}" },
-          ];
-
-          for (const token of openingTokens) {
-            const start = value.indexOf(token.open);
-            if (start === -1) {
-              continue;
-            }
-
-            let depth = 0;
-
-            for (let index = start; index < value.length; index += 1) {
-              const char = value[index];
-              if (char === token.open) {
-                depth += 1;
-              } else if (char === token.close) {
-                depth -= 1;
-                if (depth === 0) {
-                  const candidate = value.slice(start, index + 1);
-                  try {
-                    return JSON.parse(candidate);
-                  } catch (innerError) {
-                    // continue searching for other candidates
-                  }
-                }
-              }
-            }
-          }
-
-          return null;
-        };
-
-        const parsed = extractAndParseJSON(sanitized);
-        if (parsed) {
-          return parsed;
-        }
-
-        // Fallback: treat newline separated items as question strings for a single category
-        const fallbackItems = sanitized
-          .split(/\r?\n|\u2022|\*/)
-          .map((item) => item.replace(/^[\d\-\.\)\s]+/, "").trim())
-          .filter((item) => item.length > 0);
-
-        if (fallbackItems.length) {
-          if (typeof categoryContext === "string" && categoryContext.trim().length > 0) {
-            return [
-              {
-                category: categoryContext,
-                questions: fallbackItems,
-              },
-            ];
-          }
-
-          throw new Error("Unable to associate generated questions with a category context");
-        }
-
-        throw new Error("Generated questions are not valid JSON");
-      }
-    }
-
-    return raw;
-  };
-
-  // Reorder interview questions within a group
-  const handleReorderInterviewQuestions = (
-    groupId: number,
-    draggedId: string,
-    targetId: string | null
-  ) => {
-    setQuestions((prev) => {
-      const clone = prev.map((g) => ({ ...g, questions: Array.isArray(g.questions) ? [...g.questions] : [] }));
-      const group = clone.find((g) => g.id === groupId);
-      if (!group || !Array.isArray(group.questions)) return prev;
-
-      const interviewQuestions = group.questions.filter((q: any) => isInterviewQuestion(q));
-      const otherQuestions = group.questions.filter((q: any) => !isInterviewQuestion(q));
-
-      const getQuestionId = (q: any, idx: number) => (q?.id ?? `auto-${idx}`);
-      const originalOrderIds = interviewQuestions.map((q: any, idx: number) => getQuestionId(q, idx));
-      const draggedOriginalIndex = originalOrderIds.indexOf(draggedId);
-
-      if (draggedOriginalIndex === -1) {
-        return prev;
-      }
-
-      const draggedIndex = interviewQuestions.findIndex((q: any, idx: number) => {
-        const id = getQuestionId(q, idx);
-        return id === draggedId;
-      });
-      if (draggedIndex === -1) return prev;
-      const [draggedItem] = interviewQuestions.splice(draggedIndex, 1);
-
-      if (targetId) {
-        if (targetId === draggedId) {
-          interviewQuestions.splice(draggedIndex, 0, draggedItem);
-          group.questions = [...interviewQuestions, ...otherQuestions];
-          return clone;
-        }
-
-        const targetOriginalIndex = originalOrderIds.indexOf(targetId);
-        const targetIndex = interviewQuestions.findIndex((q: any, idx: number) => {
-          const id = getQuestionId(q, idx);
-          return id === targetId;
-        });
-        if (targetOriginalIndex === -1) {
-          interviewQuestions.push(draggedItem);
-        } else {
-          const adjustedTargetIndex = targetIndex === -1 ? interviewQuestions.length - 1 : targetIndex;
-          const isMovingDownward = draggedOriginalIndex < targetOriginalIndex;
-          const insertIndex = Math.min(
-            interviewQuestions.length,
-            isMovingDownward ? adjustedTargetIndex + 1 : Math.max(adjustedTargetIndex, 0)
-          );
-          interviewQuestions.splice(insertIndex, 0, draggedItem);
+    const handleClickOutside = (event: MouseEvent) => {
+      const menu = document.getElementById(`pre-screen-type-menu-${openPreScreenTypeFor}`);
+      const trigger = document.getElementById(`pre-screen-type-trigger-${openPreScreenTypeFor}`);
+      if (menu && trigger) {
+        const target = event.target as Node;
+        if (!menu.contains(target) && !trigger.contains(target)) {
+          setOpenPreScreenTypeFor(null);
         }
       } else {
-        interviewQuestions.push(draggedItem); // drop at tail
+        setOpenPreScreenTypeFor(null);
       }
+    };
 
-      group.questions = [...interviewQuestions, ...otherQuestions];
-      return clone;
-    });
-  };
-
-  const handleInterviewDragStart = (event: DragEvent<HTMLButtonElement>, questionId: string, groupId: number) => {
-    event.dataTransfer.effectAllowed = "move";
-    setDraggingInterviewQuestionId(questionId);
-    setActiveDragInterviewGroupId(groupId);
-    setInterviewTailHoverGroupId(null);
-  };
-
-  const handleInterviewDragEnter = (event: DragEvent<HTMLDivElement>, questionId: string) => {
-    if (!draggingInterviewQuestionId) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
-    if (questionId !== draggingInterviewQuestionId) {
-      setDragOverInterviewQuestionId(questionId);
-      setInterviewTailHoverGroupId(null);
-    }
-  };
-
-  const handleInterviewDragOver = (event: DragEvent<HTMLDivElement>, questionId: string) => {
-    if (!draggingInterviewQuestionId) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
-    if (questionId !== draggingInterviewQuestionId && dragOverInterviewQuestionId !== questionId) {
-      setDragOverInterviewQuestionId(questionId);
-      setInterviewTailHoverGroupId(null);
-    }
-  };
-
-  const handleInterviewDragLeave = (questionId: string) => {
-    if (dragOverInterviewQuestionId === questionId) {
-      setDragOverInterviewQuestionId(null);
-    }
-  };
-
-  const handleInterviewDrop = (event: DragEvent<HTMLDivElement>, questionId: string) => {
-    if (!draggingInterviewQuestionId || activeDragInterviewGroupId === null) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
-    handleReorderInterviewQuestions(activeDragInterviewGroupId, draggingInterviewQuestionId, questionId);
-    setDraggingInterviewQuestionId(null);
-    setDragOverInterviewQuestionId(null);
-    setActiveDragInterviewGroupId(null);
-    setInterviewTailHoverGroupId(null);
-  };
-
-  const handleInterviewDragEnd = () => {
-    setDraggingInterviewQuestionId(null);
-    setDragOverInterviewQuestionId(null);
-    setActiveDragInterviewGroupId(null);
-    setInterviewTailHoverGroupId(null);
-  };
-
-  const handleInterviewTailDragOver = (event: DragEvent<HTMLDivElement>, groupId: number) => {
-    if (!draggingInterviewQuestionId || activeDragInterviewGroupId !== groupId) {
-      return;
-    }
-
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
-
-    if (interviewTailHoverGroupId !== groupId) {
-      setInterviewTailHoverGroupId(groupId);
-    }
-
-    if (dragOverInterviewQuestionId !== null) {
-      setDragOverInterviewQuestionId(null);
-    }
-  };
-
-  const handleInterviewTailDragLeave = (groupId: number) => {
-    if (interviewTailHoverGroupId === groupId) {
-      setInterviewTailHoverGroupId(null);
-    }
-  };
-
-  const handleInterviewTailDrop = (event: DragEvent<HTMLDivElement>, groupId: number) => {
-    if (!draggingInterviewQuestionId || activeDragInterviewGroupId === null) {
-      return;
-    }
-
-    if (groupId !== activeDragInterviewGroupId) {
-      return;
-    }
-
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
-
-    handleReorderInterviewQuestions(groupId, draggingInterviewQuestionId, null);
-    setDraggingInterviewQuestionId(null);
-    setDragOverInterviewQuestionId(null);
-    setActiveDragInterviewGroupId(null);
-    setInterviewTailHoverGroupId(null);
-  };
-  const integrateGeneratedQuestions = (payload: any): boolean => {
-    const baseGroups = questions.length
-      ? cloneQuestionGroups(questions)
-      : normalizeQuestionGroups(createDefaultQuestionGroups());
-
-    const items = Array.isArray(payload) ? payload : payload ? [payload] : [];
-
-    let hasChanges = false;
-
-    items.forEach((entry) => {
-      const categoryName = typeof entry?.category === "string" ? entry.category : "";
-      const generatedQuestions = Array.isArray(entry?.questions)
-        ? entry.questions
-        : entry?.questions && typeof entry.questions === "object"
-          ? Object.values(entry.questions)
-          : [];
-
-      if (!categoryName || !generatedQuestions.length) {
-        return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpenPreScreenTypeFor(null);
       }
+    };
 
-      const normalizedCategoryName = normalizeCategoryName(categoryName);
-      const targetIndex = baseGroups.findIndex(
-        (group) => normalizeCategoryName(group.category) === normalizedCategoryName
-      );
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
 
-      if (targetIndex === -1) {
-        console.warn("[SegmentedCareerForm] Generated questions skipped (unknown category)", entry);
-        hasChanges = true;
-        return;
-      }
-
-      const targetGroup = baseGroups[targetIndex];
-      const existingQuestions = Array.isArray(targetGroup.questions)
-        ? targetGroup.questions
-        : [];
-      const existingLookup = new Set(
-        existingQuestions
-          .map((item: any) =>
-            typeof item?.question === "string" ? normalizeQuestionText(item.question) : ""
-          )
-          .filter(Boolean)
-      );
-
-      const additions = generatedQuestions
-        .map((item: unknown) => extractQuestionText(item))
-        .filter((item) => item.length > 0)
-        .filter((item) => {
-          const normalized = normalizeQuestionText(item);
-          if (existingLookup.has(normalized)) {
-            return false;
-          }
-          existingLookup.add(normalized);
-          return true;
-        })
-        .map((item) => ({ id: guid(), origin: QUESTION_ORIGIN.INTERVIEW, question: item }));
-
-      if (!additions.length) {
-        if (!existingQuestions.length && generatedQuestions.length) {
-          console.warn("[SegmentedCareerForm] Generated questions discarded after normalization", {
-            categoryName,
-            generatedQuestions,
-          });
-        }
-        return;
-      }
-
-      targetGroup.questions = [...existingQuestions, ...additions];
-      ensureQuestionCountWithinBounds(targetGroup);
-      hasChanges = true;
-    });
-
-    if (hasChanges) {
-      setQuestions(baseGroups);
-    }
-
-    return hasChanges;
-  };
-  const [openPreScreenTypeFor, setOpenPreScreenTypeFor] = useState<string | null>(null);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [openPreScreenTypeFor]);
   const persistedDraftQuestionsRef = useRef<string | null>(null);
   const hasHydratedDraftRef = useRef(false);
-  const [activeDragQuestionId, setActiveDragQuestionId] = useState<string | null>(null);
-  const [draggingQuestionId, setDraggingQuestionId] = useState<string | null>(null);
-  const [dragOverQuestionId, setDragOverQuestionId] = useState<string | null>(null);
-  const [isDragOverTail, setIsDragOverTail] = useState(false);
-
-    // Close pre-screen response type menus on outside click or escape
-    useEffect(() => {
-      if (!openPreScreenTypeFor) {
-        return;
-      }
-
-      const handleClickOutside = (event: MouseEvent) => {
-        const menu = document.getElementById(`pre-screen-type-menu-${openPreScreenTypeFor}`);
-        const trigger = document.getElementById(`pre-screen-type-trigger-${openPreScreenTypeFor}`);
-        if (menu && trigger) {
-          const target = event.target as Node;
-          if (!menu.contains(target) && !trigger.contains(target)) {
-            setOpenPreScreenTypeFor(null);
-          }
-        } else {
-          setOpenPreScreenTypeFor(null);
-        }
-      };
-
-      const handleKeyDown = (event: KeyboardEvent) => {
-        if (event.key === "Escape") {
-          setOpenPreScreenTypeFor(null);
-        }
-      };
-
-      document.addEventListener("mousedown", handleClickOutside);
-      document.addEventListener("keydown", handleKeyDown);
-
-      return () => {
-        document.removeEventListener("mousedown", handleClickOutside);
-        document.removeEventListener("keydown", handleKeyDown);
-      };
-    }, [openPreScreenTypeFor]);
 
   useEffect(() => {
     const fetchQuestionInstruction = async () => {
@@ -945,746 +498,6 @@ export default function SegmentedCareerForm({
 
 
 
-  const handleAddPreScreenQuestion = (
-    questionText: string,
-    template?: {
-      answerType?: PreScreenQuestionType;
-      options?: string[];
-      rangeDefaults?: { min?: string; max?: string };
-    }
-  ) => {
-    const trimmed = questionText.trim();
-    if (!trimmed) {
-      errorToast("Question cannot be empty", 1400);
-      return;
-    }
-
-    const alreadyExists = preScreeningQuestions.some(
-      (item: any) =>
-        typeof item?.question === "string" &&
-        item.question.trim().toLowerCase() === trimmed.toLowerCase()
-    );
-
-    if (alreadyExists) {
-      errorToast("Pre-screening question already added", 1400);
-      return;
-    }
-
-    const answerType: PreScreenQuestionType = template?.answerType ?? "dropdown";
-
-    const baseOptions =
-      (answerType === "dropdown" || answerType === "checkboxes") &&
-      Array.isArray(template?.options)
-        ? template!.options.map((label) => ({ id: guid(), label }))
-        : [];
-
-    const requiresOptions = answerType === "dropdown" || answerType === "checkboxes";
-    const normalizedOptions = baseOptions.length
-      ? baseOptions
-      : requiresOptions
-        ? [{ id: guid(), label: "" }]
-        : [];
-
-    const rangeDefaults = template?.rangeDefaults || {};
-    const rangeMinDefault =
-      answerType === "range" ? (typeof rangeDefaults.min === "string" ? rangeDefaults.min : "") : "";
-    const rangeMaxDefault =
-      answerType === "range" ? (typeof rangeDefaults.max === "string" ? rangeDefaults.max : "") : "";
-
-    setQuestions((previous) => {
-      if (!previous.length) {
-        const defaultGroups = createDefaultQuestionGroups();
-        defaultGroups[0].questions = [
-          {
-            id: guid(),
-            origin: QUESTION_ORIGIN.PRE_SCREEN,
-            question: trimmed,
-            answerType,
-            options: normalizedOptions,
-            rangeMin: rangeMinDefault,
-            rangeMax: rangeMaxDefault,
-          },
-        ];
-        return defaultGroups;
-      }
-
-      const nextGroups = cloneQuestionGroups(previous);
-
-      const targetGroup = nextGroups[0];
-      if (!targetGroup) {
-        return previous;
-      }
-
-      targetGroup.questions = [
-        ...targetGroup.questions,
-        {
-          id: guid(),
-          origin: QUESTION_ORIGIN.PRE_SCREEN,
-          question: trimmed,
-          answerType,
-          options: normalizedOptions,
-          rangeMin: rangeMinDefault,
-          rangeMax: rangeMaxDefault,
-        },
-      ];
-
-      return nextGroups;
-    });
-
-    candidateActionToast(
-      <span style={{ fontSize: 14, fontWeight: 700, color: "#181D27" }}>
-        Question added
-      </span>,
-      1400,
-      <i className="la la-check-circle" style={{ color: "#039855", fontSize: 24 }}></i>
-    );
-  };
-
-  const handleRemovePreScreenQuestion = (questionId: string) => {
-    setOpenPreScreenTypeFor((current) => (current === questionId ? null : current));
-    setQuestions((previous) => {
-      if (!previous.length) {
-        return previous;
-      }
-
-      const nextGroups = cloneQuestionGroups(previous);
-
-      const targetGroup = nextGroups[0];
-      if (!targetGroup) {
-        return previous;
-      }
-
-      const initialLength = targetGroup.questions.length;
-      const filtered = targetGroup.questions.filter((item: any) => {
-        if (String(item?.id) !== questionId) {
-          return true;
-        }
-        return !isPreScreenQuestion(item);
-      });
-
-      if (filtered.length === initialLength) {
-        return previous;
-      }
-
-      targetGroup.questions = filtered;
-      return nextGroups;
-    });
-  };
-
-  const handleUpdatePreScreenQuestion = (
-    questionId: string,
-    updates: Partial<{ question: string; answerType: PreScreenQuestionType }>
-  ) => {
-    setQuestions((previous) => {
-      if (!previous.length) {
-        return previous;
-      }
-
-      const nextGroups = cloneQuestionGroups(previous);
-      const targetGroup = nextGroups[0];
-      if (!targetGroup) {
-        return previous;
-      }
-
-      const questionIndex = targetGroup.questions.findIndex(
-        (item: any) => item?.id === questionId
-      );
-
-      if (questionIndex === -1) {
-        return previous;
-      }
-
-      const currentQuestion = targetGroup.questions[questionIndex];
-      if (!isPreScreenQuestion(currentQuestion)) {
-        return previous;
-      }
-      const nextQuestion = {
-        ...currentQuestion,
-        ...updates,
-        origin: QUESTION_ORIGIN.PRE_SCREEN,
-      };
-
-      if (updates.answerType) {
-        if (updates.answerType === "dropdown" || updates.answerType === "checkboxes") {
-          const existingOptions = Array.isArray(currentQuestion?.options)
-            ? currentQuestion.options.map((option: any) => ({ ...option }))
-            : [];
-          nextQuestion.options = existingOptions.length
-            ? existingOptions
-            : [{ id: guid(), label: "" }];
-          nextQuestion.rangeMin = "";
-          nextQuestion.rangeMax = "";
-        } else if (updates.answerType === "range") {
-          nextQuestion.options = [];
-          nextQuestion.rangeMin =
-            typeof currentQuestion?.rangeMin === "string" ? currentQuestion.rangeMin : "";
-          nextQuestion.rangeMax =
-            typeof currentQuestion?.rangeMax === "string" ? currentQuestion.rangeMax : "";
-        } else {
-          nextQuestion.options = [];
-          nextQuestion.rangeMin = "";
-          nextQuestion.rangeMax = "";
-        }
-      } else {
-        if (!Array.isArray(nextQuestion.options)) {
-          nextQuestion.options = [];
-        }
-      }
-
-      targetGroup.questions[questionIndex] = nextQuestion;
-      return nextGroups;
-    });
-  };
-
-  const handleReorderPreScreenQuestions = (sourceQuestionId: string, targetQuestionId: string | null) => {
-    if (!sourceQuestionId) {
-      return;
-    }
-
-    setQuestions((previous) => {
-      if (!previous.length) {
-        return previous;
-      }
-
-      const nextGroups = cloneQuestionGroups(previous);
-      const targetGroup = nextGroups[0];
-      if (!targetGroup || !Array.isArray(targetGroup.questions)) {
-        return previous;
-      }
-
-      const questionList = targetGroup.questions;
-      const sourceIndex = questionList.findIndex((item: any) => item?.id === sourceQuestionId);
-      if (sourceIndex === -1) {
-        return previous;
-      }
-
-      const [movedQuestion] = questionList.splice(sourceIndex, 1);
-      if (!movedQuestion) {
-        return previous;
-      }
-
-      if (!isPreScreenQuestion(movedQuestion)) {
-        questionList.splice(sourceIndex, 0, movedQuestion);
-        return previous;
-      }
-
-      if (targetQuestionId === null) {
-        questionList.push(movedQuestion);
-        return nextGroups;
-      }
-
-      if (targetQuestionId === sourceQuestionId) {
-        questionList.splice(sourceIndex, 0, movedQuestion);
-        return previous;
-      }
-
-      const targetIndexAfterRemoval = questionList.findIndex(
-        (item: any) => item?.id === targetQuestionId
-      );
-
-      if (targetIndexAfterRemoval === -1) {
-        questionList.push(movedQuestion);
-        return nextGroups;
-      }
-
-      if (sourceIndex > targetIndexAfterRemoval) {
-        questionList.splice(targetIndexAfterRemoval, 0, movedQuestion);
-      } else {
-        questionList.splice(targetIndexAfterRemoval + 1, 0, movedQuestion);
-      }
-
-      return nextGroups;
-    });
-  };
-
-  const handlePreScreenDragStart = (event: DragEvent<HTMLDivElement>, questionId: string) => {
-    if (activeDragQuestionId !== questionId) {
-      event.preventDefault();
-      return;
-    }
-
-    setDraggingQuestionId(questionId);
-    setDragOverQuestionId(null);
-    setIsDragOverTail(false);
-    event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("text/plain", questionId);
-    setActiveDragQuestionId(questionId);
-  };
-
-  const handlePreScreenDragOver = (event: DragEvent<HTMLDivElement>, targetQuestionId: string) => {
-    if (!draggingQuestionId || draggingQuestionId === targetQuestionId) {
-      return;
-    }
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
-    if (dragOverQuestionId !== targetQuestionId) {
-      setDragOverQuestionId(targetQuestionId);
-    }
-    if (isDragOverTail) {
-      setIsDragOverTail(false);
-    }
-  };
-
-  const handlePreScreenDrop = (event: DragEvent<HTMLDivElement>, targetQuestionId: string) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const sourceId = draggingQuestionId || event.dataTransfer.getData("text/plain");
-    if (sourceId && sourceId !== targetQuestionId) {
-      handleReorderPreScreenQuestions(sourceId, targetQuestionId);
-    }
-    handlePreScreenDragEnd();
-  };
-
-  const handlePreScreenDragLeave = (targetQuestionId: string) => {
-    if (dragOverQuestionId === targetQuestionId) {
-      setDragOverQuestionId(null);
-    }
-  };
-
-  const handlePreScreenDragEnd = () => {
-    setDraggingQuestionId(null);
-    setDragOverQuestionId(null);
-    setActiveDragQuestionId(null);
-    setIsDragOverTail(false);
-  };
-
-  const handleUpdatePreScreenRange = (
-    questionId: string,
-    key: "rangeMin" | "rangeMax",
-    value: string
-  ) => {
-    setQuestions((previous) => {
-      if (!previous.length) {
-        return previous;
-      }
-
-      const nextGroups = cloneQuestionGroups(previous);
-      const targetGroup = nextGroups[0];
-      if (!targetGroup) {
-        return previous;
-      }
-
-      const nextQuestion = targetGroup.questions.find((item: any) => item?.id === questionId);
-      if (!nextQuestion || !isPreScreenQuestion(nextQuestion) || nextQuestion.answerType !== "range") {
-        return previous;
-      }
-
-      nextQuestion[key] = value;
-      return nextGroups;
-    });
-  };
-
-  const handleAddPreScreenOption = (questionId: string) => {
-    setQuestions((previous) => {
-      if (!previous.length) {
-        return previous;
-      }
-
-      const nextGroups = cloneQuestionGroups(previous);
-      const targetGroup = nextGroups[0];
-      if (!targetGroup) {
-        return previous;
-      }
-
-      const nextQuestion = targetGroup.questions.find(
-        (item: any) => item?.id === questionId
-      );
-
-      if (
-        !nextQuestion ||
-        !isPreScreenQuestion(nextQuestion) ||
-        (nextQuestion.answerType !== "dropdown" && nextQuestion.answerType !== "checkboxes")
-      ) {
-        return previous;
-      }
-
-      const existingOptions = Array.isArray(nextQuestion.options)
-        ? nextQuestion.options
-        : [];
-
-      nextQuestion.options = [
-        ...existingOptions,
-        {
-          id: guid(),
-          label: `Option ${existingOptions.length + 1}`,
-        },
-      ];
-
-      return nextGroups;
-    });
-  };
-
-  const handleUpdatePreScreenOption = (
-    questionId: string,
-    optionId: string,
-    label: string
-  ) => {
-    setQuestions((previous) => {
-      if (!previous.length) {
-        return previous;
-      }
-
-      const nextGroups = cloneQuestionGroups(previous);
-      const targetGroup = nextGroups[0];
-      if (!targetGroup) {
-        return previous;
-      }
-
-      const nextQuestion = targetGroup.questions.find(
-        (item: any) => item?.id === questionId
-      );
-
-      if (
-        !nextQuestion ||
-        !isPreScreenQuestion(nextQuestion) ||
-        (nextQuestion.answerType !== "dropdown" && nextQuestion.answerType !== "checkboxes")
-      ) {
-        return previous;
-      }
-
-      nextQuestion.options = Array.isArray(nextQuestion.options)
-        ? nextQuestion.options.map((option: any) =>
-            option.id === optionId ? { ...option, label } : option
-          )
-        : [];
-
-      return nextGroups;
-    });
-  };
-
-  const handleRemovePreScreenOption = (questionId: string, optionId: string) => {
-    setQuestions((previous) => {
-      if (!previous.length) {
-        return previous;
-      }
-
-      const nextGroups = cloneQuestionGroups(previous);
-      const targetGroup = nextGroups[0];
-      if (!targetGroup) {
-        return previous;
-      }
-
-      const nextQuestion = targetGroup.questions.find(
-        (item: any) => item?.id === questionId
-      );
-
-      if (
-        !nextQuestion ||
-        !isPreScreenQuestion(nextQuestion) ||
-        (nextQuestion.answerType !== "dropdown" && nextQuestion.answerType !== "checkboxes")
-      ) {
-        return previous;
-      }
-
-      const existingOptions = Array.isArray(nextQuestion.options)
-        ? nextQuestion.options
-        : [];
-
-      const filtered = existingOptions.filter((option: any) => option.id !== optionId);
-      if (filtered.length === existingOptions.length || filtered.length === 0) {
-        return previous;
-      }
-
-      nextQuestion.options = filtered;
-      return nextGroups;
-    });
-  };
-
-  const handleAddCustomPreScreenQuestion = () => {
-    const newQuestionId = guid();
-
-    setQuestions((previous) => {
-      if (!previous.length) {
-        const defaultGroups = createDefaultQuestionGroups();
-        defaultGroups[0].questions = [
-          {
-            id: newQuestionId,
-            origin: QUESTION_ORIGIN.PRE_SCREEN,
-            question: "",
-            answerType: "short_text",
-            options: [],
-            rangeMin: "",
-            rangeMax: "",
-          },
-        ];
-        return defaultGroups;
-      }
-
-      const nextGroups = cloneQuestionGroups(previous);
-      const targetGroup = nextGroups[0];
-      if (!targetGroup) {
-        return previous;
-      }
-
-      const currentQuestions = Array.isArray(targetGroup.questions)
-        ? targetGroup.questions
-        : [];
-
-      targetGroup.questions = [
-        ...currentQuestions,
-        {
-          id: newQuestionId,
-          origin: QUESTION_ORIGIN.PRE_SCREEN,
-          question: "",
-          answerType: "short_text",
-          options: [],
-          rangeMin: "",
-          rangeMax: "",
-        },
-      ];
-
-      return nextGroups;
-    });
-
-    if (typeof document !== "undefined") {
-      setTimeout(() => {
-        const inputField = document.getElementById(`pre-screen-question-${newQuestionId}`) as HTMLInputElement | null;
-        if (inputField) {
-          inputField.focus();
-        }
-      }, 80);
-    }
-
-    candidateActionToast(
-      <span style={{ fontSize: 14, fontWeight: 700, color: "#181D27" }}>
-        Custom question added
-      </span>,
-      1400,
-      <i className="la la-check-circle" style={{ color: "#039855", fontSize: 24 }}></i>
-    );
-  };
-
-  const addInterviewQuestionToGroup = (groupId: number, rawQuestion: string) => {
-    const trimmedQuestion = rawQuestion.trim();
-    if (!trimmedQuestion) {
-      errorToast("Question cannot be empty", 1400);
-      return;
-    }
-
-    let wasAdded = false;
-
-    setQuestions((previous) => {
-      const baseGroups = previous.length
-        ? cloneQuestionGroups(previous)
-        : normalizeQuestionGroups(createDefaultQuestionGroups());
-      const targetIndex = baseGroups.findIndex((group) => group.id === groupId);
-
-      if (targetIndex === -1) {
-        return previous.length ? previous : baseGroups;
-      }
-
-      const targetGroup = baseGroups[targetIndex];
-      const existingQuestions = Array.isArray(targetGroup.questions)
-        ? targetGroup.questions
-        : [];
-      const normalizedNewQuestion = normalizeQuestionText(trimmedQuestion);
-      const duplicateExists = existingQuestions.some(
-        (item: any) =>
-          typeof item?.question === "string" &&
-          normalizeQuestionText(item.question) === normalizedNewQuestion
-      );
-
-      if (duplicateExists) {
-        return previous.length ? previous : baseGroups;
-      }
-
-      targetGroup.questions = [
-        ...existingQuestions,
-        { id: guid(), origin: QUESTION_ORIGIN.INTERVIEW, question: trimmedQuestion },
-      ];
-
-      ensureQuestionCountWithinBounds(targetGroup);
-      wasAdded = true;
-      return baseGroups;
-    });
-
-    if (wasAdded) {
-      candidateActionToast(
-        <span style={{ fontSize: 14, fontWeight: 700, color: "#181D27" }}>
-          Question added
-        </span>,
-        1400,
-        <i className="la la-check-circle" style={{ color: "#039855", fontSize: 24 }}></i>
-      );
-    } else {
-      errorToast("Question already exists in this category", 1400);
-    }
-  };
-
-  const updateInterviewQuestionInGroup = (
-    groupId: number,
-    questionId: string | number,
-    rawQuestion: string
-  ) => {
-    const trimmedQuestion = rawQuestion.trim();
-    if (!trimmedQuestion) {
-      errorToast("Question cannot be empty", 1400);
-      return;
-    }
-
-    const normalizedQuestionId = String(questionId);
-    let wasUpdated = false;
-    let duplicateDetected = false;
-
-    setQuestions((previous) => {
-      if (!previous.length) {
-        return previous;
-      }
-
-      const nextGroups = cloneQuestionGroups(previous);
-      const targetIndex = nextGroups.findIndex((group) => group.id === groupId);
-      if (targetIndex === -1) {
-        return previous;
-      }
-
-      const targetGroup = nextGroups[targetIndex];
-      const existingQuestions = Array.isArray(targetGroup.questions)
-        ? targetGroup.questions
-        : [];
-      const normalizedNewQuestion = normalizeQuestionText(trimmedQuestion);
-
-      duplicateDetected = existingQuestions.some(
-        (item: any) =>
-          typeof item?.question === "string" &&
-          normalizeQuestionText(item.question) === normalizedNewQuestion &&
-          String(item?.id) !== normalizedQuestionId
-      );
-
-      if (duplicateDetected) {
-        return previous;
-      }
-
-      const questionIndex = existingQuestions.findIndex(
-        (item: any) => String(item?.id) === normalizedQuestionId
-      );
-
-      if (questionIndex === -1) {
-        return previous;
-      }
-
-      const targetQuestion = existingQuestions[questionIndex];
-      if (!isInterviewQuestion(targetQuestion)) {
-        return previous;
-      }
-
-      targetGroup.questions[questionIndex] = {
-        ...targetQuestion,
-        origin: QUESTION_ORIGIN.INTERVIEW,
-        question: trimmedQuestion,
-      };
-
-      wasUpdated = true;
-      return nextGroups;
-    });
-
-    if (duplicateDetected) {
-      errorToast("Question already exists in this category", 1400);
-      return;
-    }
-
-    if (wasUpdated) {
-      candidateActionToast(
-        <span style={{ fontSize: 14, fontWeight: 700, color: "#181D27" }}>
-          Question updated
-        </span>,
-        1400,
-        <i className="la la-check-circle" style={{ color: "#039855", fontSize: 24 }}></i>
-      );
-    }
-  };
-
-  const removeInterviewQuestionFromGroup = (groupId: number, questionId: string | number) => {
-    let wasRemoved = false;
-
-    setQuestions((previous) => {
-      if (!previous.length) {
-        return previous;
-      }
-
-      const nextGroups = cloneQuestionGroups(previous);
-      const targetIndex = nextGroups.findIndex((group) => group.id === groupId);
-      if (targetIndex === -1) {
-        return previous;
-      }
-
-      const targetGroup = nextGroups[targetIndex];
-      const existingQuestions = Array.isArray(targetGroup.questions)
-        ? targetGroup.questions
-        : [];
-      const initialLength = existingQuestions.length;
-
-      const filtered = existingQuestions.filter((item: any) => {
-        if (!isInterviewQuestion(item)) {
-          return true;
-        }
-        return String(item?.id) !== String(questionId);
-      });
-
-      if (filtered.length === initialLength) {
-        return previous;
-      }
-
-      targetGroup.questions = filtered;
-      ensureQuestionCountWithinBounds(targetGroup);
-      wasRemoved = true;
-      return nextGroups;
-    });
-
-    if (wasRemoved) {
-      candidateActionToast(
-        <span style={{ fontSize: 14, fontWeight: 700, color: "#181D27" }}>
-          Question deleted
-        </span>,
-        1400,
-        <i className="la la-check-circle" style={{ color: "#039855", fontSize: 24 }}></i>
-      );
-    }
-  };
-
-  const openQuestionModal = (
-    action: QuestionModalAction,
-    groupId: number,
-    questionToEdit?: { id: string | number; question: string }
-  ) => {
-    setQuestionModalState({ action, groupId, questionToEdit });
-  };
-
-  const closeQuestionModal = () => {
-    setQuestionModalState({ action: "", groupId: null, questionToEdit: undefined });
-  };
-
-  const handleQuestionModalAction = (
-    action: string,
-    groupId?: number,
-    questionText?: string,
-    questionId?: string | number
-  ) => {
-    if (!action) {
-      closeQuestionModal();
-      return;
-    }
-
-    const resolvedGroupId = groupId ?? questionModalState.groupId;
-    if (!resolvedGroupId) {
-      closeQuestionModal();
-      return;
-    }
-
-    if (action === "add" && typeof questionText === "string") {
-      addInterviewQuestionToGroup(resolvedGroupId, questionText);
-    } else if (
-      action === "edit" &&
-      typeof questionText === "string" &&
-      typeof questionId !== "undefined"
-    ) {
-      updateInterviewQuestionInGroup(resolvedGroupId, questionId, questionText);
-    } else if (action === "delete" && typeof questionId !== "undefined") {
-      removeInterviewQuestionFromGroup(resolvedGroupId, questionId);
-    }
-
-    closeQuestionModal();
-  };
-
   // Validate prerequisite job details before constructing an AI prompt. Returns trimmed values
   // so the downstream generators do not need to duplicate null/empty checks.
   const ensureJobDetailsForGeneration = () => {
@@ -1799,14 +612,14 @@ export default function SegmentedCareerForm({
       console.log("[SegmentedCareerForm] Generate all - Raw response:", response?.data);
       console.log("[SegmentedCareerForm] Generate all - Parsed payload:", parsed);
 
-      const hasChanges = integrateGeneratedQuestions(parsed);
+      const addedCount = Number(integrateGeneratedQuestions(parsed));
 
-      console.log("[SegmentedCareerForm] Generate all - hasChanges:", hasChanges);
+      console.log("[SegmentedCareerForm] Generate all - addedCount:", addedCount);
 
-      if (hasChanges) {
+      if (addedCount > 0) {
         candidateActionToast(
           <span style={{ fontSize: 14, fontWeight: 700, color: "#181D27", marginLeft: 8 }}>
-            Questions generated successfully
+            {`Generated ${addedCount} new question${addedCount === 1 ? "" : "s"}`}
           </span>,
           1500,
           <i className="la la-check-circle" style={{ color: "#039855", fontSize: 32 }}></i>
@@ -1900,14 +713,14 @@ export default function SegmentedCareerForm({
       console.log("[SegmentedCareerForm] Generate category - Raw response:", response?.data);
       console.log("[SegmentedCareerForm] Generate category - Parsed payload:", parsed);
 
-      const hasChanges = integrateGeneratedQuestions(parsed);
+      const addedCount = Number(integrateGeneratedQuestions(parsed));
 
-      console.log("[SegmentedCareerForm] Generate category - hasChanges:", hasChanges);
+      console.log("[SegmentedCareerForm] Generate category - addedCount:", addedCount);
 
-      if (hasChanges) {
+      if (addedCount > 0) {
         candidateActionToast(
           <span style={{ fontSize: 14, fontWeight: 700, color: "#181D27", marginLeft: 8 }}>
-            {`Generated ${categoryName} questions`}
+            {`Generated ${addedCount} ${categoryName} question${addedCount === 1 ? "" : "s"}`}
           </span>,
           1500,
           <i className="la la-check-circle" style={{ color: "#039855", fontSize: 32 }}></i>
